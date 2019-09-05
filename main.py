@@ -8,7 +8,7 @@ num_days = 10
 class Accumulator:
     def __init__(self, solver, T):
         max_flow = 20
-        max_capacity = 0
+        max_capacity = 20
         self.in_flow = [solver.NumVar(0, max_flow) for _ in range(T)]
         self.out_flow = [solver.NumVar(0, max_flow) for _ in range(T)]
         self.balance = [solver.NumVar(0, max_capacity) for _ in range(T)]
@@ -44,7 +44,11 @@ def bind_line_vars(solver, x0, x1, diff=None):
     if diff is None:
         diff = [0]*len(x0)
     for x0t_1, x1t, d in zip(x0, x1[1:], diff):
-        solver.Add(x1t == x0t_1 + d)
+        #solver.Add(x1t == x0t_1 + d)
+        t_in = x0t_1 + d
+        Q_loss = 0.01
+        T_out = 0
+        solver.Add(x1t == t_in - Q_loss * (t_in - T_out))
 
 def bind_delay_line(solver, X, acc_idx=None):
     if acc_idx is None:
