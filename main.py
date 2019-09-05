@@ -23,10 +23,12 @@ class Accumulator:
 
 def get_demand_forecast():
     # unit in hypothetical MW
-    return np.array([30, 30, 30, 30, 30, 30,
+    demand = np.array([30, 30, 30, 30, 30, 30,
                      40, 50, 50, 50, 40, 30,
                      30, 30, 40, 40, 50, 50,
-                     60, 60, 60, 50, 40, 30]*num_days)
+                     60, 60, 60, 50, 40, 30]*num_days) * 1.0
+    demand += np.random.normal(size=len(demand)) * 2
+    return demand
 
 
 '''
@@ -89,11 +91,18 @@ def production_inertia_cost(solver, P):
 def plan():
     solver = get_solver("CBC")
 
+    np.random.seed(0)
     # parameters
     demand = get_demand_forecast()
     T = len(demand) # planning horizon in hours
     n_plants = 1
     max_production = 100 # MW
+    max_buy = 20 # MW
+    max_sell = 20 # MW
+    prod_price = 1 # € / MW
+    prod_inertia = 0.2 # € / dMW/dt
+    buy_price = 1.1 # € / MW
+    sell_price = 0.9 # € / MW
     max_temp = 100
     delay = 5 # time from production to consumer in hours
 
@@ -104,7 +113,13 @@ def plan():
     max_forward_temp = 90
 
     # decision variable: production (MW)
-    P = [solver.NumVar(0, max_production) for _ in range(T)]
+    Prod = [solver.NumVar(0, max_production) for _ in range(T)]
+    Buy = [solver.NumVar(0, max_buy) for _ in range(T)]
+    Sell = [solver.NumVar(0, max_sell) for _ in range(T)]
+    P = [p+b-s for p, b, s in zip(Prod, Buy, Sell)] # Total power, MW
+    for p in P:
+        solver.Add(p >= 0)
+        solver.Add(p <= max_production)
     # state variables: temperature (C) in different parts of the network
     X = [[solver.NumVar(0, max_temp) for _ in range(T)] 
          for _ in range(delay * 2)]
@@ -147,42 +162,57 @@ def plan():
 
 
     # objective
-    prod_base_cost = solver.Sum(P)
-    prod_inertia_cost = production_inertia_cost(solver, P)
-    cost = 1 * prod_base_cost + 0.9 * prod_inertia_cost
+    prod_base_cost = solver.Sum(Prod)
+    prod_inertia_cost = production_inertia_cost(solver, Prod)
+    prod_cost = prod_price*prod_base_cost + prod_inertia*prod_inertia_cost
+    cost = prod_cost + buy_price * solver.Sum(Buy) - sell_price * solver.Sum(Sell)
     solver.SetObjective(cost, maximize=False)
 
     solver.Solve(time_limit=10)
 
     P_solved = [solver.solution_value(p) for p in P]
+    Prod_solved = [solver.solution_value(p) for p in Prod]
     T_solved = [solver.solution_value(x) for x in X[delay-1]]
     acc_in = [solver.solution_value(a) for a in acc.in_flow]
     acc_out = [solver.solution_value(a) for a in acc.out_flow]
     acc_balance = [solver.solution_value(a) for a in acc.balance]
     T_pipe_solved = [[solver.solution_value(xt) for xt in x] for x in X]
     T_pipe_solved = np.array(T_pipe_solved)
+    buy_solved = [solver.solution_value(b) for b in Buy]
+    sell_solved = [solver.solution_value(s) for s in Sell]
+
+    cost_solved = solver.solution_value(cost)
+    print("Total cost: {0:.1f}".format(cost_solved))
 
     x = list(range(T))
-    fig, (ax_plot, ax_img) = plt.subplots(nrows=2, sharex=True)
-    ax_plot.step(x, P_solved, color='b')
-    ax_plot.step(x, demand, color='r')
-    ax_plot.step(x, T_solved, color='g')
-    ax_plot.step(x, acc_in)
-    ax_plot.step(x, acc_balance, linewidth=3)
-    ax_plot.step(x, acc_out)
+    fig, (ax_power, ax_acc, ax_market, ax_img) = plt.subplots(nrows=4, sharex=True)
+    ax_power.step(x, Prod_solved, color='b')
+    ax_power.step(x, P_solved, color='b', linestyle="--")
+    ax_power.step(x, demand, color='r')
+    ax_power.step(x, T_solved, color='g')
+    ax_acc.step(x, acc_in)
+    ax_acc.step(x, acc_balance, linewidth=3)
+    ax_acc.step(x, acc_out)
+    ax_market.step(x, sell_solved)
+    ax_market.step(x, buy_solved)
 
-    ax_plot.legend(["Planned production", "Demand", "Forward temperature", 
-                "Accumulator in", "Acc balance", "Acc out"], loc=1)
-    ax_plot.set_xlabel("Time / h")
-    ax_plot.set_ylabel("Temp C / Power MW")
-    #ax_plot.set_title("")
+    ax_power.legend(["Production", "Production + Market", "Demand", "Forward temperature"], loc=1)
+    #ax_power.set_xlabel("Time / h")
+    ax_power.set_ylabel("Power MW / Temp C")
+    ax_power.set_title("Total cost: {0:.1f}".format(cost_solved))
+
+    ax_acc.legend(["Accumulator in", "Acc balance", "Acc out"], loc=1)
+    ax_acc.set_ylabel("Power MW")
+
+    ax_market.legend(["Sold power", "Bought power"], loc=1)
+    ax_market.set_ylabel("Power MW")
 
     #_, ax_img = plt.subplots()
     ax_img.imshow(T_pipe_solved, aspect="auto", cmap="coolwarm")
     ax_img.set_xlabel("Time / h")
     ax_img.set_ylabel("Piece of line")
-    ax_img.set_title("Heat propagation from plant (top),\n\
-                      to customer (middle), and back (bottom)")
+    #ax_img.set_title("Heat propagation from plant (top),\n\
+    #                  to customer (middle), and back (bottom)")
 
     plt.show()
 
