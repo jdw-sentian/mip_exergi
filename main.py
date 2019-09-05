@@ -8,7 +8,7 @@ num_days = 10
 class Accumulator:
     def __init__(self, solver, T):
         max_flow = 20
-        max_capacity = 20
+        max_capacity = 0
         self.in_flow = [solver.NumVar(0, max_flow) for _ in range(T)]
         self.out_flow = [solver.NumVar(0, max_flow) for _ in range(T)]
         self.balance = [solver.NumVar(0, max_capacity) for _ in range(T)]
@@ -155,17 +155,31 @@ def plan():
     acc_in = [solver.solution_value(a) for a in acc.in_flow]
     acc_out = [solver.solution_value(a) for a in acc.out_flow]
     acc_balance = [solver.solution_value(a) for a in acc.balance]
+    T_pipe_solved = [[solver.solution_value(xt) for xt in x] for x in X]
+    T_pipe_solved = np.array(T_pipe_solved)
 
     x = list(range(T))
-    plt.step(x, P_solved, color='b')
-    plt.step(x, demand, color='r')
-    plt.step(x, T_solved, color='g')
-    plt.step(x, acc_in)
-    plt.step(x, acc_balance, linewidth=3)
-    plt.step(x, acc_out)
+    fig, (ax_plot, ax_img) = plt.subplots(nrows=2, sharex=True)
+    ax_plot.step(x, P_solved, color='b')
+    ax_plot.step(x, demand, color='r')
+    ax_plot.step(x, T_solved, color='g')
+    ax_plot.step(x, acc_in)
+    ax_plot.step(x, acc_balance, linewidth=3)
+    ax_plot.step(x, acc_out)
 
-    plt.legend(["Planned production", "Demand", "Forward temperature", 
-                "Accumulator in", "Acc balance", "Acc out"])
+    ax_plot.legend(["Planned production", "Demand", "Forward temperature", 
+                "Accumulator in", "Acc balance", "Acc out"], loc=1)
+    ax_plot.set_xlabel("Time / h")
+    ax_plot.set_ylabel("Temp C / Power MW")
+    #ax_plot.set_title("")
+
+    #_, ax_img = plt.subplots()
+    ax_img.imshow(T_pipe_solved, aspect="auto", cmap="coolwarm")
+    ax_img.set_xlabel("Time / h")
+    ax_img.set_ylabel("Piece of line")
+    ax_img.set_title("Heat propagation from plant (top),\n\
+                      to customer (middle), and back (bottom)")
+
     plt.show()
 
 
