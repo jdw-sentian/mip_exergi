@@ -11,8 +11,8 @@ num_days = 10
 class Accumulator:
     def __init__(self, solver, T, name="acc"):
         self.name = name
-        self.max_flow = 10
-        self.max_capacity = 20
+        self.max_flow = 5
+        self.max_capacity = 15
         self.in_flow = [solver.NumVar(0, self.max_flow) for _ in range(T)]
         self.out_flow = [solver.NumVar(0, self.max_flow) for _ in range(T)]
         self.balance = [solver.NumVar(0, self.max_capacity) for _ in range(T)]
@@ -25,12 +25,12 @@ class Accumulator:
                                           - self.out_flow[t])
         '''
 
-    def integrate(self, solver, G, in_node, out_node, delay):
+    def integrate(self, solver, G, in_node, out_node, in_delay, out_delay):
         G.add_node(self.name, **{"initial": 0})
         G.add_edge(self.name, self.name, **{"delay": 1, "active": False, "flow": self.balance})
         # see if we can make the input delay 0 instead
-        G.add_edge(in_node, self.name, **{"delay": 1, "active": True, "flow": self.in_flow})
-        G.add_edge(self.name, out_node, **{"delay": delay, "active": True, "flow": self.out_flow})
+        G.add_edge(in_node, self.name, **{"delay": in_delay, "active": True, "flow": self.in_flow})
+        G.add_edge(self.name, out_node, **{"delay": out_delay, "active": True, "flow": self.out_flow})
 
 
 def get_demand_forecast():
@@ -91,8 +91,6 @@ def constraints_from_nfg(solver, nfg, T):
         remainder = [solver.NumVar(0, 100) for _ in range(T)]
         #[solver.Add(rem_t >= 0) for rem_t in remainder]
         n_passive = len(passive)
-        if x_name == "acc":
-            print("n_passive", n_passive)
         for passive_t, rem_t in zip(zip(*passive), remainder):
             for pass_t in passive_t:
                 solver.Add(pass_t == rem_t / n_passive)
@@ -113,8 +111,6 @@ def constraints_from_nfg(solver, nfg, T):
             delays = [data["delay"] for data in in_edges_data]
             # first version: no heat loss
             in_flows_t = [flow[t - d] for flow, d in zip(flows, delays) if t - d >= 0]
-            #if x_name == "acc":
-            #    print(len(in_flows_t))
             if len(in_flows_t):
                 in_flow_t = solver.Sum(in_flows_t)
             else:
@@ -129,7 +125,9 @@ def constraints_from_nfg(solver, nfg, T):
         in_flow = in_flows.get(x_name, [0]*T)
         out_flow = out_flows.get(x_name, [0]*T)
         div = nfg.nodes[x_name]["div"]
-        for in_t, out_t, div_t in zip(in_flow, out_flow, div):
+        for t, (in_t, out_t, div_t) in enumerate(zip(in_flow, out_flow, div)):
+            if t < 24:
+                continue
             solver.Add(out_t - in_t == div_t)
 
     # remember the out_flow, for constraints
@@ -197,7 +195,7 @@ def plan():
     
     # adding accumulator
     acc = Accumulator(solver, T)
-    acc.integrate(solver, G, "x0", "xc", delay)
+    acc.integrate(solver, G, "x0", "xc", 0, delay)
 
     network2nfg(solver, G, max_temp, max_temp, T)
     constraints_from_nfg(solver, G, T)
@@ -229,7 +227,7 @@ def plan():
     acc_in = [solver.solution_value(a) for a in acc.in_flow]
     acc_out = [solver.solution_value(a) for a in acc.out_flow]
     acc_balance = [solver.solution_value(a) for a in acc.balance]
-    manual_balance = np.cumsum(np.array(acc_in) - np.array(acc_out))
+    #manual_balance = np.cumsum(np.array(acc_in[:-4]) - np.array(acc_out[4:]))
     #print(manual_balance)
     #T_pipe_solved = [[solver.solution_value(xt) for xt in x] for x in X]
     #T_pipe_solved = np.array(T_pipe_solved)
@@ -241,20 +239,20 @@ def plan():
     print("Sum of demand: {0:.3f}".format(sum(demand)))
     print("Sum of production: {0:.3f}".format(sum(P_solved)))
 
-    x = list(range(T))
+    x = list(range(24, T))
     fig, (ax_power, ax_acc, ax_market) = plt.subplots(nrows=3, sharex=True)
     #fig, ax_power = plt.subplots(nrows=1, sharex=True)
-    ax_power.step(x, Prod_solved, color='b')
-    ax_power.step(x, P_solved, color='b', linestyle="--")
-    ax_power.step(x, demand, color='r')
-    ax_power.step(x, T_solved, color='g')
+    ax_power.step(x, Prod_solved[24:], color='b')
+    ax_power.step(x, P_solved[24:], color='b', linestyle="--")
+    ax_power.step(x, demand[24:], color='r')
+    ax_power.step(x, T_solved[24:], color='g')
     #ax_power.step(x, Tx0_solved)    
-    ax_acc.step(x, acc_in)
-    ax_acc.step(x, acc_balance, linewidth=3)
-    ax_acc.step(x, acc_out)
-    ax_acc.step(x, manual_balance, color="r")
-    ax_market.step(x, sell_solved)
-    ax_market.step(x, buy_solved)
+    ax_acc.step(x, acc_in[24:])
+    ax_acc.step(x, acc_balance[24:], linewidth=3)
+    ax_acc.step(x, acc_out[24:])
+    #ax_acc.step(x[4:], manual_balance, color="r")
+    ax_market.step(x, sell_solved[24:])
+    ax_market.step(x, buy_solved[24:])
 
     ax_power.legend(["Production", "Production + Market", "Demand", "Forward temperature"], loc=1)
     #ax_power.set_xlabel("Time / h")
