@@ -23,6 +23,13 @@ class Accumulator:
                                           + self.in_flow[t-1] \
                                           - self.out_flow[t])
 
+    def integrate_accumulator(self, solver, G, in_node, out_node, delay):
+        G.add_node("acc", **{"vals": self.balance})
+        G.add_edge("acc", "acc", **{"delay": 1, "active": False})
+        # see if we can make the input delay 0 instead
+        G.add_edge("x0", "acc", **{"delay": 1, "active": True, "flow": self.in_flow})
+        G.add_edge("acc", "xc", **{"delay": delay-1, "active": True, "flow": self.out_flow})
+
 
 def get_demand_forecast():
     # unit in hypothetical MW
@@ -142,8 +149,8 @@ def plan():
     T = len(demand) # planning horizon in time units
     n_plants = 1
     max_production = 100 # MW
-    max_buy = 0 # MW
-    max_sell = 0 # MW
+    max_buy = 20 # MW
+    max_sell = 20 # MW
     prod_price = 1 # € / MW
     prod_inertia = 0.2 # € / dMW/dt
     buy_price = 1.1 # € / MW
@@ -154,8 +161,8 @@ def plan():
     init_pre_temp = 80
     init_post_temp = 50
 
-    min_forward_temp = 78
-    max_forward_temp = 82
+    min_forward_temp = 75
+    max_forward_temp = 90
 
     Prod = get_node_vals(solver, 0, max_production, T)
     Buy = get_node_vals(solver, 0, max_buy, T)
@@ -169,10 +176,6 @@ def plan():
     G = nx.DiGraph()
     G.add_node("production", **{"vals": P})
     G.add_node("consumer", **{"vals": demand})
-    
-    #G.add_edge("production", "consumer", **{"delay": delay, "active": True})
-
-    
     G.add_node("x0", **{"initial": init_post_temp})
     G.add_node("xc" ,**{"initial": init_pre_temp})
 
@@ -181,6 +184,9 @@ def plan():
     G.add_edge("x0", "xc", **{"delay": delay, "active": False})
     G.add_edge("xc", "x0", **{"delay": delay, "active": False})
     
+    # adding accumulator
+    acc = Accumulator(solver, T)
+    integrate_accumulator(acc, solver, G, "x0", "xc", delay):
 
     network2nfg(solver, G, max_temp, max_temp, T)
     constraints_from_nfg(solver, G)
@@ -221,8 +227,8 @@ def plan():
     print("Sum of production: {0:.3f}".format(sum(P_solved)))
 
     x = list(range(T))
-    #fig, (ax_power, ax_acc, ax_market, ax_img) = plt.subplots(nrows=4, sharex=True)
-    fig, ax_power = plt.subplots(nrows=1, sharex=True)
+    fig, (ax_power, ax_acc, ax_market) = plt.subplots(nrows=3, sharex=True)
+    #fig, ax_power = plt.subplots(nrows=1, sharex=True)
     ax_power.step(x, Prod_solved, color='b')
     ax_power.step(x, P_solved, color='b', linestyle="--")
     ax_power.step(x, demand, color='r')
@@ -231,8 +237,8 @@ def plan():
     #ax_acc.step(x, acc_in)
     #ax_acc.step(x, acc_balance, linewidth=3)
     #ax_acc.step(x, acc_out)
-    #ax_market.step(x, sell_solved)
-    #ax_market.step(x, buy_solved)
+    ax_market.step(x, sell_solved)
+    ax_market.step(x, buy_solved)
 
     ax_power.legend(["Production", "Production + Market", "Demand", "Forward temperature"], loc=1)
     #ax_power.set_xlabel("Time / h")
@@ -242,8 +248,8 @@ def plan():
     #ax_acc.legend(["Accumulator in", "Acc balance", "Acc out"], loc=1)
     #ax_acc.set_ylabel("Power MW")
 
-    #ax_market.legend(["Sold power", "Bought power"], loc=1)
-    #ax_market.set_ylabel("Power MW")
+    ax_market.legend(["Sold power", "Bought power"], loc=1)
+    ax_market.set_ylabel("Power MW")
 
     #_, ax_img = plt.subplots()
     #ax_img.imshow(T_pipe_solved, aspect="auto", cmap="coolwarm")
