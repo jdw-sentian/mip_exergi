@@ -6,8 +6,6 @@ import networkx as nx
 
 from sentian_miami import get_solver
 
-num_days = 10
-
 '''
 class Accumulator:
     def __init__(self, solver, T, name="acc"):
@@ -26,13 +24,13 @@ class Accumulator:
         G.add_edge(self.name, out_node, **{"delay": out_delay, "active": True, "flow": self.out_flow})
 '''
 
-def get_demand_forecast():
+def get_demand_forecast(num_days=1):
     # unit in hypothetical MW
     demand = np.array([30, 30, 30, 30, 30, 30,
                      40, 50, 50, 50, 40, 30,
                      30, 30, 40, 40, 50, 50,
                      60, 60, 60, 50, 40, 30]*num_days) * 1.0
-    demand += np.random.normal(size=len(demand)) * 5
+    demand += np.random.normal(size=len(demand)) * 2
     return demand
 
 
@@ -215,32 +213,45 @@ def extract_interval(solver, G, t_start, t_end):
     return G
 
 
-def plan(demand, t_start, t_end,
+def plan(demand,
          max_production, max_buy, max_sell,
          prod_price, prod_inertia, buy_price, sell_price,
-         max_temp, max_flow, delay, T,
+         max_temp, max_flow, delay,
          min_forward_temp, max_forward_temp,
          acc_max_flow, acc_max_balance,
-         pre_legacy=None, post_legacy=None):
-    t0 = time.time()
-    solver = get_solver("CBC")
+         t_start=None, t_end=None,
+         custom_divs=None, custom_flows=None,
+         pre_legacy=None, post_legacy=None, solver=None):
+    #t0 = time.time()
+    if custom_divs is None:
+        custom_divs = {}
+    if custom_flows is None:
+        custom_flows = {}
+    if solver is None:
+        solver = get_solver("CBC")
+        solve_all = True
+    else:
+        solve_all = False
+    T = len(demand)
     G = get_structure(delay)
-
     divs = {"plant": get_numvars(solver, 0, max_production, T),
             "buy": get_numvars(solver, 0, max_buy, T),
             "sell": -get_numvars(solver, 0, max_sell, T),
             "consumer": -demand
             }
+    divs.update(custom_divs)
     flows = {("acc", "acc"): get_numvars(solver, 0, acc_max_balance, T),
              ("x0", "acc"): get_numvars(solver, 0, acc_max_flow, T),
              ("acc", "xc"): get_numvars(solver, 0, acc_max_flow, T)
             }
+    flows.update(custom_flows)
     default_div = lambda: [0]*T
     default_flow = lambda: get_numvars(solver, 0, max_flow, T)
     default_flow_val = lambda: [0]*T
     set_divs(G, divs, default_div)
     set_flows(solver, G, flows, default_flow)
-    merge(G, pre=pre_legacy, post=post_legacy)
+    if (pre_legacy is not None) or (post_legacy is not None):
+        merge(G, pre=pre_legacy, post=post_legacy)
     in_flows = bind_in_flows(solver, G, T)
     out_flows = bind_out_flows(solver, G, T)
     if not pre_legacy:
@@ -259,24 +270,24 @@ def plan(demand, t_start, t_end,
         solver.Add(x_t >= min_forward_temp)
         solver.Add(x_t <= max_forward_temp)
 
+
     cost = set_objective(solver, G, prod_price, prod_inertia, buy_price, sell_price)
+    if solve_all:
+        solver.Solve(time_limit=10)    
+        return extract_interval(solver, G, t_start, t_end)
+    else:
+        return G, cost
 
-    t1 = time.time()
-    print("Build time: {0:.3f}".format(t1 - t0))
-
-    # solving
-    solver.Solve(time_limit=10)
-    
-    return extract_interval(solver, G, t_start, t_end)
+    #t1 = time.time()
+    #print("Build time: {0:.3f}".format(t1 - t0))
 
 
 def main():
     np.random.seed(0)
-    demand = get_demand_forecast()
+    demand = get_demand_forecast(num_days=5)
 
     # parameters
     params = {}
-    params["T"] = len(demand) # planning horizon in time units
     params["max_production"] = 100 # MW
     params["max_buy"] = 20 # MW
     params["max_sell"] = 20 # MW
@@ -297,8 +308,24 @@ def main():
     G_legacy = plan(demand, t_start=48, t_end=72, **params)
     _, axes_legacy = plt.subplots(nrows=3, sharex=True)
     present(axes_legacy, G_legacy)
-    demand = get_demand_forecast()
-    G = plan(demand, t_start=0, t_end=48, pre_legacy=[G_legacy], **params)
+    
+    solver = get_solver("CBC")
+    costs = []
+    custom_divs = {"plant": get_numvars(0, params["max_production"], 1),
+                   "buy": get_numvars(0, params["max_buy"], 1),
+                   "sell": get_numvars(0, params["max_sell"], 1)
+                   }
+    for _ in range(10):
+        demand = get_demand_forecast(num_days=1)
+        dem0, dem_rest = demand[:1], demand[1:]
+        G0, _ = plan(dem0, pre_legacy=[G_legacy], custom_divs=custom_divs)
+        G, cost = plan(dem_rest, pre_legacy=[G_legacy, G0])
+        costs.append(cost)
+    solver.SetObjective(solver.Sum(costs), maximize=False)
+
+    #G = plan(demand, t_start=0, t_end=48, pre_legacy=[G_legacy], **params)
+    solver.Solve(time_limit=10)
+
     _, axes = plt.subplots(nrows=3, sharex=True)
     present(axes, G)
     '''
