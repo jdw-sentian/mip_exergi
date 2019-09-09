@@ -12,7 +12,7 @@ class Accumulator:
     def __init__(self, solver, T, name="acc"):
         self.name = name
         self.max_flow = 5
-        self.max_capacity = 15
+        self.max_capacity = 5
         self.in_flow = [solver.NumVar(0, self.max_flow) for _ in range(T)]
         self.out_flow = [solver.NumVar(0, self.max_flow) for _ in range(T)]
         self.balance = [solver.NumVar(0, self.max_capacity) for _ in range(T)]
@@ -39,7 +39,7 @@ def get_demand_forecast():
                      40, 50, 50, 50, 40, 30,
                      30, 30, 40, 40, 50, 50,
                      60, 60, 60, 50, 40, 30]*num_days) * 1.0
-    demand += np.random.normal(size=len(demand)) * 2
+    demand += np.random.normal(size=len(demand)) * 5
     return demand
 
 
@@ -239,20 +239,20 @@ def plan():
     print("Sum of demand: {0:.3f}".format(sum(demand)))
     print("Sum of production: {0:.3f}".format(sum(P_solved)))
 
-    x = list(range(24, T))
+    x = list(range(48, T-24))
     fig, (ax_power, ax_acc, ax_market) = plt.subplots(nrows=3, sharex=True)
     #fig, ax_power = plt.subplots(nrows=1, sharex=True)
-    ax_power.step(x, Prod_solved[24:], color='b')
-    ax_power.step(x, P_solved[24:], color='b', linestyle="--")
-    ax_power.step(x, demand[24:], color='r')
-    ax_power.step(x, T_solved[24:], color='g')
+    ax_power.step(x, Prod_solved[48:-24], color='b')
+    ax_power.step(x, P_solved[48:-24], color='b', linestyle="--")
+    ax_power.step(x, demand[48:-24], color='r')
+    ax_power.step(x, T_solved[48:-24], color='g')
     #ax_power.step(x, Tx0_solved)    
-    ax_acc.step(x, acc_in[24:])
-    ax_acc.step(x, acc_balance[24:], linewidth=3)
-    ax_acc.step(x, acc_out[24:])
+    ax_acc.step(x, acc_in[48:-24])
+    ax_acc.step(x, acc_balance[48:-24], linewidth=3)
+    ax_acc.step(x, acc_out[48:-24])
     #ax_acc.step(x[4:], manual_balance, color="r")
-    ax_market.step(x, sell_solved[24:])
-    ax_market.step(x, buy_solved[24:])
+    ax_market.step(x, sell_solved[48:-24])
+    ax_market.step(x, buy_solved[48:-24])
 
     ax_power.legend(["Production", "Production + Market", "Demand", "Forward temperature"], loc=1)
     #ax_power.set_xlabel("Time / h")
