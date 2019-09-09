@@ -1,3 +1,4 @@
+import time
 from ortools.linear_solver import pywraplp
 
 status2str = ["OPTIMAL", "FEASIBLE", "INFEASIBLE", "UNBOUNDED", "ABNORMAL", "MODEL_INVALID", "NOT_SOLVED"]
@@ -37,9 +38,14 @@ class SolverOrtools(pywraplp.Solver):
         else:
             self.Minimize(expr)
 
-    def Solve(self, time_limit=0):
+    def Solve(self, time_limit=0, print_output=True):
+        t0 = time.time()
         self.set_time_limit(time_limit*1000)
-        return super().Solve()
+        status = super().Solve()
+        t1 = time.time()
+        if print_output:
+            print("Status:", status2str[status])
+            print("Time: {0:.3f}".format(t1 -t0))
 
     def solution_value(self, variable):
         try:
