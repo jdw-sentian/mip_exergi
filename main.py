@@ -50,6 +50,29 @@ def set_flows(solver, G, flows, default_flow):
         data["flow"] = flows.get((x_name, y_name), default_flow())
 
 
+def merge(G, pre=None, post=None):
+    if pre is None:
+        pre = []
+    if post is None:
+        post = []
+
+    print("pre:", pre)
+    print("post:", post)
+
+    for x_name, data in G.nodes(data=True):
+        pre_data = [p.nodes[x_name]["div"] for p in pre]
+        post_data = [p.nodes[x_name]["div"] for p in post]
+        data["div"] = np.concatenate(pre_data + [data["div"]] + post_data)
+        #pre_data = [p.nodes[x_name]["out_flow"] for p in pre]
+        #post_data = [p.nodes[x_name]["out_flow"] for p in post]
+        #data["out_flow"] = np.concatenate(pre_data + [data["out_flow"]] + post_data)
+
+    for x_name, y_name, data in G.edges(data=True):
+        pre_data = [p.edges[x_name, y_name]["flow"] for p in pre]
+        post_data = [p.edges[x_name, y_name]["flow"] for p in post]
+        data["flow"] = np.concatenate(pre_data + [data["flow"]] + post_data)
+
+
 def bind_out_flows(solver, G, T):
     """Constraints for out flows
     actives are free variables, bound only by resource constraint
@@ -192,12 +215,13 @@ def extract_interval(solver, G, t_start, t_end):
     return G
 
 
-def plan(demand, t_start, t_end, G_legacy,
+def plan(demand, t_start, t_end,
          max_production, max_buy, max_sell,
          prod_price, prod_inertia, buy_price, sell_price,
          max_temp, max_flow, delay, T,
          min_forward_temp, max_forward_temp,
-         acc_max_flow, acc_max_balance):
+         acc_max_flow, acc_max_balance,
+         pre_legacy=None, post_legacy=None):
     t0 = time.time()
     solver = get_solver("CBC")
     G = get_structure(delay)
@@ -216,10 +240,19 @@ def plan(demand, t_start, t_end, G_legacy,
     default_flow_val = lambda: [0]*T
     set_divs(G, divs, default_div)
     set_flows(solver, G, flows, default_flow)
+    merge(G, pre=pre_legacy, post=post_legacy)
     in_flows = bind_in_flows(solver, G, T)
     out_flows = bind_out_flows(solver, G, T)
+    if not pre_legacy:
+        burn_in = 1
+    else:
+        for G_legacy in pre_legacy:
+            burn_in = 0
+            for x_name in G_legacy:
+                burn_in += len(G_legacy.nodes[x_name]["div"])
+                break
     divergence_constraints(solver, G, in_flows, out_flows,
-                           default_flow_val, burn_in=1)
+                           default_flow_val, burn_in=burn_in)
 
     # customer satisfaction constraint
     for x_t in G.nodes["xc"]["out_flow"]:
@@ -261,13 +294,19 @@ def main():
     params["acc_max_balance"] = 5
     params["acc_max_flow"] = 5
 
-    G = plan(demand, t_start=48, t_end=72, G_legacy=None, **params)
-    #demand = get_demand_forecast()
-    #G = plan(demand, t_start=0, t_end=48, G_legacy=G_legacy, **params)
-    present(G)
+    G_legacy = plan(demand, t_start=48, t_end=72, **params)
+    _, axes_legacy = plt.subplots(nrows=3, sharex=True)
+    present(axes_legacy, G_legacy)
+    demand = get_demand_forecast()
+    G = plan(demand, t_start=0, t_end=48, pre_legacy=[G_legacy], **params)
+    _, axes = plt.subplots(nrows=3, sharex=True)
+    present(axes, G)
+    '''
+    '''
+    plt.show()
 
-
-def present(G):
+def present(axes, G):
+    ax_power, ax_acc, ax_market = axes
     plant = G.nodes["plant"]["div"]
     buy = G.nodes["buy"]["div"]
     sell = -G.nodes["sell"]["div"]
@@ -279,7 +318,6 @@ def present(G):
     demand = -G.nodes["consumer"]["div"]
 
     x = list(range(len(plant)))
-    fig, (ax_power, ax_acc, ax_market) = plt.subplots(nrows=3, sharex=True)
     #fig, ax_power = plt.subplots(nrows=1, sharex=True)
     ax_power.step(x, plant, color='b')
     ax_power.step(x, prod, color='b', linestyle="--")
@@ -303,8 +341,6 @@ def present(G):
 
     ax_market.legend(["Sold power", "Bought power"], loc=1)
     ax_market.set_ylabel("Power MW")
-
-    plt.show()
 
 
 if __name__ == '__main__':
