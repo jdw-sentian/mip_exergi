@@ -180,32 +180,26 @@ def get_structure(delay):
     return G
 
 
-def plan():
+def extract_interval(solver, G, t_start, t_end):
+    G = G.copy()
+    for x_name, data in G.nodes(data=True):
+        data["div"] = np.array([solver.solution_value(d) for d in data["div"][t_start:t_end]])
+        data["out_flow"] = np.array([solver.solution_value(d) for d in data["out_flow"][t_start:t_end]])
+
+    for x_name, y_name, data in G.edges(data=True):
+        data["flow"] = np.array([solver.solution_value(f) for f in data["flow"][t_start:t_end]])
+
+    return G
+
+
+def plan(demand, t_start, t_end, G_legacy,
+         max_production, max_buy, max_sell,
+         prod_price, prod_inertia, buy_price, sell_price,
+         max_temp, max_flow, delay, T,
+         min_forward_temp, max_forward_temp,
+         acc_max_flow, acc_max_balance):
     t0 = time.time()
     solver = get_solver("CBC")
-
-    np.random.seed(0)
-    # parameters
-    demand = get_demand_forecast()
-    T = len(demand) # planning horizon in time units
-    n_plants = 1
-    max_production = 100 # MW
-    max_buy = 20 # MW
-    max_sell = 20 # MW
-    prod_price = 1 # € / MW
-    prod_inertia = 0.2 # € / dMW/dt
-    buy_price = 1.1 # € / MW
-    sell_price = 0.9 # € / MW
-    max_temp = 100
-    max_flow = 100
-    delay = 5 # time from production to consumer in time units
-
-    min_forward_temp = 75
-    max_forward_temp = 90
-
-    acc_max_balance = 5
-    acc_max_flow = 5
-
     G = get_structure(delay)
 
     divs = {"plant": get_numvars(solver, 0, max_production, T),
@@ -227,7 +221,7 @@ def plan():
     divergence_constraints(solver, G, in_flows, out_flows,
                            default_flow_val, burn_in=1)
 
-    # custormer satisfaction constraint
+    # customer satisfaction constraint
     for x_t in G.nodes["xc"]["out_flow"]:
         solver.Add(x_t >= min_forward_temp)
         solver.Add(x_t <= max_forward_temp)
@@ -239,52 +233,70 @@ def plan():
 
     # solving
     solver.Solve(time_limit=10)
+    
+    return extract_interval(solver, G, t_start, t_end)
 
-    # presenting
-    Plant = G.nodes["plant"]["div"]
-    Buy = G.nodes["buy"]["div"]
-    Sell = -G.nodes["sell"]["div"]
-    Prod = G.edges["production", "x0"]["flow"]
-    acc_in_flow = G.edges["x0", "acc"]["flow"]
-    acc_out_flow = G.edges["acc", "xc"]["flow"]
+
+def main():
+    np.random.seed(0)
+    demand = get_demand_forecast()
+
+    # parameters
+    params = {}
+    params["T"] = len(demand) # planning horizon in time units
+    params["max_production"] = 100 # MW
+    params["max_buy"] = 20 # MW
+    params["max_sell"] = 20 # MW
+    params["prod_price"] = 1 # € / MW
+    params["prod_inertia"] = 0.2 # € / dMW/dt
+    params["buy_price"] = 1.1 # € / MW
+    params["sell_price"] = 0.9 # € / MW
+    params["max_temp"] = 100
+    params["max_flow"] = 100
+    params["delay"] = 5 # time from production to consumer in time units
+
+    params["min_forward_temp"] = 75
+    params["max_forward_temp"] = 90
+
+    params["acc_max_balance"] = 5
+    params["acc_max_flow"] = 5
+
+    G = plan(demand, t_start=48, t_end=72, G_legacy=None, **params)
+    #demand = get_demand_forecast()
+    #G = plan(demand, t_start=0, t_end=48, G_legacy=G_legacy, **params)
+    present(G)
+
+
+def present(G):
+    plant = G.nodes["plant"]["div"]
+    buy = G.nodes["buy"]["div"]
+    sell = -G.nodes["sell"]["div"]
+    prod = G.edges["production", "x0"]["flow"]
+    acc_in = G.edges["x0", "acc"]["flow"]
+    acc_out = G.edges["acc", "xc"]["flow"]
     acc_balance = G.edges["acc", "acc"]["flow"]
-    Plant_solved = [solver.solution_value(p) for p in Plant]
-    Prod_solved = [solver.solution_value(p) for p in Prod]
-    T_solved = [solver.solution_value(x) for x in G.nodes["xc"]["out_flow"]]
-    acc_in = [solver.solution_value(a) for a in acc_in_flow]
-    acc_out = [solver.solution_value(a) for a in acc_out_flow]
-    acc_balance = [solver.solution_value(a) for a in acc_balance]
-    #manual_balance = np.cumsum(np.array(acc_in[:-4]) - np.array(acc_out[4:]))
-    #print(manual_balance)
-    #T_pipe_solved = [[solver.solution_value(xt) for xt in x] for x in X]
-    #T_pipe_solved = np.array(T_pipe_solved)
-    buy_solved = [solver.solution_value(b) for b in Buy]
-    sell_solved = [solver.solution_value(s) for s in Sell]
+    customer_temp = G.nodes["xc"]["out_flow"]
+    demand = -G.nodes["consumer"]["div"]
 
-    cost_solved = solver.solution_value(cost)
-    print("Total cost: {0:.1f}".format(cost_solved))
-    print("Sum of demand: {0:.3f}".format(sum(demand)))
-    print("Sum of production: {0:.3f}".format(sum(Prod_solved)))
-
-    x = list(range(48, T-24))
+    x = list(range(len(plant)))
     fig, (ax_power, ax_acc, ax_market) = plt.subplots(nrows=3, sharex=True)
     #fig, ax_power = plt.subplots(nrows=1, sharex=True)
-    ax_power.step(x, Plant_solved[48:-24], color='b')
-    ax_power.step(x, Prod_solved[48:-24], color='b', linestyle="--")
-    ax_power.step(x, demand[48:-24], color='r')
-    ax_power.step(x, T_solved[48:-24], color='g')
+    ax_power.step(x, plant, color='b')
+    ax_power.step(x, prod, color='b', linestyle="--")
+    ax_power.step(x, demand, color='r')
+    ax_power.step(x, customer_temp, color='g')
     #ax_power.step(x, Tx0_solved)    
-    ax_acc.step(x, acc_in[48:-24])
-    ax_acc.step(x, acc_balance[48:-24], linewidth=3)
-    ax_acc.step(x, acc_out[48:-24])
+    ax_acc.step(x, acc_in)
+    ax_acc.step(x, acc_balance, linewidth=3)
+    ax_acc.step(x, acc_out)
     #ax_acc.step(x[4:], manual_balance, color="r")
-    ax_market.step(x, sell_solved[48:-24])
-    ax_market.step(x, buy_solved[48:-24])
+    ax_market.step(x, sell)
+    ax_market.step(x, buy)
 
     ax_power.legend(["Production", "Production + Market", "Demand", "Forward temperature"], loc=1)
     #ax_power.set_xlabel("Time / h")
     ax_power.set_ylabel("Power MW / Temp C")
-    ax_power.set_title("Total cost: {0:.1f}".format(cost_solved))
+    #ax_power.set_title("Total cost: {0:.1f}".format(cost_solved))
 
     ax_acc.legend(["Accumulator in", "Acc balance", "Acc out"], loc=1)
     ax_acc.set_ylabel("Power MW")
@@ -292,15 +304,65 @@ def plan():
     ax_market.legend(["Sold power", "Bought power"], loc=1)
     ax_market.set_ylabel("Power MW")
 
-    #_, ax_img = plt.subplots()
-    #ax_img.imshow(T_pipe_solved, aspect="auto", cmap="coolwarm")
-    #ax_img.set_xlabel("Time / h")
-    #ax_img.set_ylabel("Piece of line")
-    #ax_img.set_title("Heat propagation from plant (top),\n\
-    #                  to customer (middle), and back (bottom)")
-
     plt.show()
 
 
 if __name__ == '__main__':
-    plan()
+    main()
+
+    '''
+    G = get_structure(delay)
+
+    divs = {"plant": get_numvars(solver, 0, max_production, T),
+            "buy": get_numvars(solver, 0, max_buy, T),
+            "sell": -get_numvars(solver, 0, max_sell, T),
+            "consumer": -demand
+            }
+    flows = {("acc", "acc"): get_numvars(solver, 0, acc_max_balance, T),
+             ("x0", "acc"): get_numvars(solver, 0, acc_max_flow, T),
+             ("acc", "xc"): get_numvars(solver, 0, acc_max_flow, T)
+            }
+    default_div = lambda: [0]*T
+    default_flow = lambda: get_numvars(solver, 0, max_flow, T)
+    default_flow_val = lambda: [0]*T
+    set_divs(G, divs, default_div)
+    set_flows(solver, G, flows, default_flow)
+    in_flows = bind_in_flows(solver, G, T)
+    out_flows = bind_out_flows(solver, G, T)
+    divergence_constraints(solver, G, in_flows, out_flows,
+                           default_flow_val, burn_in=1)
+
+    # customer satisfaction constraint
+    for x_t in G.nodes["xc"]["out_flow"]:
+        solver.Add(x_t >= min_forward_temp)
+        solver.Add(x_t <= max_forward_temp)
+
+    cost = set_objective(solver, G, prod_price, prod_inertia, buy_price, sell_price)
+
+    t1 = time.time()
+    print("Build time: {0:.3f}".format(t1 - t0))
+
+    # solving
+    solver.Solve(time_limit=10)
+    '''
+
+    '''
+    Plant_solved = [solver.solution_value(p) for p in Plant]
+    Prod_solved = [solver.solution_value(p) for p in Prod]
+    acc_in = [solver.solution_value(a) for a in acc_in_flow]
+    acc_out = [solver.solution_value(a) for a in acc_out_flow]
+    acc_balance = [solver.solution_value(a) for a in acc_balance]
+    '''
+    #manual_balance = np.cumsum(np.array(acc_in[:-4]) - np.array(acc_out[4:]))
+    #print(manual_balance)
+    #T_pipe_solved = [[solver.solution_value(xt) for xt in x] for x in X]
+    #T_pipe_solved = np.array(T_pipe_solved)
+    #buy_solved = [solver.solution_value(b) for b in Buy]
+    #sell_solved = [solver.solution_value(s) for s in Sell]
+
+    '''
+    cost_solved = solver.solution_value(cost)
+    print("Total cost: {0:.1f}".format(cost_solved))
+    print("Sum of demand: {0:.3f}".format(sum(demand)))
+    print("Sum of production: {0:.3f}".format(sum(Prod_solved)))
+    '''
