@@ -8,6 +8,7 @@ from sentian_miami import get_solver
 
 num_days = 10
 
+'''
 class Accumulator:
     def __init__(self, solver, T, name="acc"):
         self.name = name
@@ -16,14 +17,6 @@ class Accumulator:
         self.in_flow = [solver.NumVar(0, self.max_flow) for _ in range(T)]
         self.out_flow = [solver.NumVar(0, self.max_flow) for _ in range(T)]
         self.balance = [solver.NumVar(0, self.max_capacity) for _ in range(T)]
-        '''
-        solver.Add(self.balance[0] == 0)
-        for t in range(1, len(self.balance)):
-            solver.Add(self.out_flow[t] <= self.balance[t])
-            solver.Add(self.balance[t] == self.balance[t-1] \
-                                          + self.in_flow[t-1] \
-                                          - self.out_flow[t])
-        '''
 
     def integrate(self, solver, G, in_node, out_node, in_delay, out_delay):
         G.add_node(self.name, **{"initial": 0})
@@ -31,7 +24,7 @@ class Accumulator:
         # see if we can make the input delay 0 instead
         G.add_edge(in_node, self.name, **{"delay": in_delay, "active": True, "flow": self.in_flow})
         G.add_edge(self.name, out_node, **{"delay": out_delay, "active": True, "flow": self.out_flow})
-
+'''
 
 def get_demand_forecast():
     # unit in hypothetical MW
@@ -43,39 +36,28 @@ def get_demand_forecast():
     return demand
 
 
-def get_node_vals(solver, lb, ub, N):
-    return [solver.NumVar(lb, ub) for _ in range(N)]
+def get_numvars(solver, lb, ub, N):
+    return np.array([solver.NumVar(lb, ub) for _ in range(N)])
 
 
-def network2nfg(solver, G, max_capacity, max_flow, T):
-    """nfg stands for normal flow graph
-    In an nfg, all nodes are the same 'type'.
-    Edges may be marked as 'passive' to note that
-    they split the remainder of free flow.
+def set_divs(G, divs, default_div):
+    for x_name, data in G.nodes(data=True):
+        data["div"] = divs.get(x_name, default_div())
+
+
+def set_flows(solver, G, flows, default_flow):
+    for x_name, y_name, data in G.edges(data=True):
+        data["flow"] = flows.get((x_name, y_name), default_flow())
+
+
+def bind_out_flows(solver, G, T):
+    """Constraints for out flows
+    actives are free variables, bound only by resource constraint
+    passives split remaining flow equally
     """
-
-    for _, data in G.nodes(data=True):
-        if "div" not in data:
-            data["div"] = [0]*T
-
-    for _, _, data in G.edges(data=True):
-        if "flow" not in data:
-            data["flow"] = get_node_vals(solver, 0, max_flow, T)
-
-
-def constraints_from_nfg(solver, nfg, T):
-    """Makes the associated MIP model constraints
-    for an nfg
-    """
-
-    in_flows = {}
     out_flows = {}
-
-    # constraints for flows
-    # actives are free variables, bound only by resource constraint
-    # passives split remaining flow equally
-    for x_name in nfg:
-        out_edges = nfg.out_edges(nbunch=x_name, data=True)
+    for x_name in G:
+        out_edges = G.out_edges(nbunch=x_name, data=True)
         try:
             _, _, out_edges_data = zip(*out_edges)
         except ValueError:
@@ -96,10 +78,15 @@ def constraints_from_nfg(solver, nfg, T):
                 solver.Add(pass_t == rem_t / n_passive)
         out_flows[x_name] = [rem_t + pull_t for rem_t, pull_t in zip(remainder, pulled)]
 
-    # constraints for nodes
-    # the value of a node is just the sum of 
-    for x_name in nfg:
-        in_edges = nfg.in_edges(nbunch=x_name, data=True)
+    return out_flows
+
+
+def bind_in_flows(solver, G, T):
+    """Constraints for in flows
+    """
+    in_flows = {}
+    for x_name in G:
+        in_edges = G.in_edges(nbunch=x_name, data=True)
         try:
             _, _, in_edges_data = zip(*in_edges)
         except ValueError:
@@ -114,26 +101,31 @@ def constraints_from_nfg(solver, nfg, T):
             if len(in_flows_t):
                 in_flow_t = solver.Sum(in_flows_t)
             else:
-                in_flow_t = nfg.nodes[x_name]["initial"]
+                in_flow_t = 80 #G.nodes[x_name]["initial"]
             #solver.Add(in_flow == x[t])
             in_flow.append(in_flow_t)
         in_flows[x_name] = in_flow
 
-    # constrain so that 
-    #   out_flow - in_flow = divergence
-    for x_name in nfg:
-        in_flow = in_flows.get(x_name, [0]*T)
-        out_flow = out_flows.get(x_name, [0]*T)
-        div = nfg.nodes[x_name]["div"]
+    return in_flows
+
+
+def divergence_constraints(solver, G, in_flows, out_flows, default_flow_val, burn_in=0):
+    """Constrain so that 
+    out_flow - in_flow = divergence
+    """
+    for x_name in G:
+        in_flow = in_flows.get(x_name, default_flow_val())
+        out_flow = out_flows.get(x_name, default_flow_val())
+        div = G.nodes[x_name]["div"]
         for t, (in_t, out_t, div_t) in enumerate(zip(in_flow, out_flow, div)):
-            if t < 24:
+            if t < burn_in:
                 continue
             solver.Add(out_t - in_t == div_t)
 
     # remember the out_flow, for constraints
-    for x_name in nfg:
-        out_flow = out_flows.get(x_name, [0]*T)
-        nfg.nodes[x_name]["out_flow"] = out_flow
+    for x_name in G:
+        out_flow = out_flows.get(x_name, default_flow_val())
+        G.nodes[x_name]["out_flow"] = out_flow
 
 
 def abs_diff_var(solver, val):
@@ -146,6 +138,46 @@ def abs_diff_var(solver, val):
 def production_inertia_cost(solver, P):
     change_vars = [abs_diff_var(solver, p0 - p1) for p0, p1 in zip(P[:-1], P[1:])]
     return solver.Sum(change_vars)
+
+
+def set_objective(solver, G, prod_price, prod_inertia, buy_price, sell_price):
+    Plant = G.nodes["plant"]["div"]
+    Buy = G.nodes["buy"]["div"]
+    Sell = -G.nodes["sell"]["div"]
+    Prod = G.edges["production", "x0"]["flow"]
+    prod_base_cost = solver.Sum(Plant)
+    prod_inertia_cost = production_inertia_cost(solver, Plant)
+    prod_cost = prod_price*prod_base_cost + prod_inertia*prod_inertia_cost
+    cost = prod_cost + buy_price * solver.Sum(Buy) - sell_price * solver.Sum(Sell)
+    solver.SetObjective(cost, maximize=False)
+    return cost
+
+
+def get_structure(delay):
+    G = nx.DiGraph()
+    G.add_node("plant")
+    G.add_node("buy")
+    G.add_node("sell")
+    G.add_node("production")
+    G.add_node("consumer")
+    G.add_node("x0")
+    G.add_node("xc")
+
+    G.add_edge("plant", "production", **{"delay": 0, "active": False})
+    G.add_edge("buy", "production", **{"delay": 0, "active": False})
+    G.add_edge("production", "sell", **{"delay": 0, "active": True})
+    G.add_edge("production", "x0", **{"delay": 0, "active": False})
+    G.add_edge("xc", "consumer", **{"delay": 0, "active": True})
+    G.add_edge("x0", "xc", **{"delay": delay, "active": False})
+    G.add_edge("xc", "x0", **{"delay": delay, "active": False})
+    
+    # accumulator
+    G.add_node("acc")
+    G.add_edge("acc", "acc", **{"delay": 1, "active": False})
+    G.add_edge("x0", "acc", **{"delay": 0, "active": True})
+    G.add_edge("acc", "xc", **{"delay": delay, "active": True})
+
+    return G
 
 
 def plan():
@@ -165,68 +197,63 @@ def plan():
     buy_price = 1.1 # € / MW
     sell_price = 0.9 # € / MW
     max_temp = 100
+    max_flow = 100
     delay = 5 # time from production to consumer in time units
-
-    init_pre_temp = 80
-    init_post_temp = 50
 
     min_forward_temp = 75
     max_forward_temp = 90
 
-    Prod = get_node_vals(solver, 0, max_production, T)
-    Buy = get_node_vals(solver, 0, max_buy, T)
-    Sell = get_node_vals(solver, 0, max_sell, T)
-    P = [p+b-s for p, b, s in zip(Prod, Buy, Sell)] # Total power, MW
-    for p in P:
-        solver.Add(p >= 0)
-        solver.Add(p <= max_production)
+    acc_max_balance = 5
+    acc_max_flow = 5
 
-    # build network graph
-    G = nx.DiGraph()
-    G.add_node("production", **{"div": P})
-    G.add_node("consumer", **{"div": -demand})
-    G.add_node("x0", **{"initial": init_post_temp})
-    G.add_node("xc" ,**{"initial": init_pre_temp})
+    G = get_structure(delay)
 
-    G.add_edge("production", "x0", **{"delay": 0, "active": False})
-    G.add_edge("xc", "consumer", **{"delay": 0, "active": True})
-    G.add_edge("x0", "xc", **{"delay": delay, "active": False})
-    G.add_edge("xc", "x0", **{"delay": delay, "active": False})
-    
-    # adding accumulator
-    acc = Accumulator(solver, T)
-    acc.integrate(solver, G, "x0", "xc", 0, delay)
+    divs = {"plant": get_numvars(solver, 0, max_production, T),
+            "buy": get_numvars(solver, 0, max_buy, T),
+            "sell": -get_numvars(solver, 0, max_sell, T),
+            "consumer": -demand
+            }
+    flows = {("acc", "acc"): get_numvars(solver, 0, acc_max_balance, T),
+             ("x0", "acc"): get_numvars(solver, 0, acc_max_flow, T),
+             ("acc", "xc"): get_numvars(solver, 0, acc_max_flow, T)
+            }
+    default_div = lambda: [0]*T
+    default_flow = lambda: get_numvars(solver, 0, max_flow, T)
+    default_flow_val = lambda: [0]*T
+    set_divs(G, divs, default_div)
+    set_flows(solver, G, flows, default_flow)
+    in_flows = bind_in_flows(solver, G, T)
+    out_flows = bind_out_flows(solver, G, T)
+    divergence_constraints(solver, G, in_flows, out_flows,
+                           default_flow_val, burn_in=1)
 
-    network2nfg(solver, G, max_temp, max_temp, T)
-    constraints_from_nfg(solver, G, T)
-
+    # custormer satisfaction constraint
     for x_t in G.nodes["xc"]["out_flow"]:
         solver.Add(x_t >= min_forward_temp)
         solver.Add(x_t <= max_forward_temp)
 
-    # objective
-    prod_base_cost = solver.Sum(Prod)
-    prod_inertia_cost = production_inertia_cost(solver, Prod)
-    prod_cost = prod_price*prod_base_cost + prod_inertia*prod_inertia_cost
-    cost = prod_cost + buy_price * solver.Sum(Buy) - sell_price * solver.Sum(Sell)
-    solver.SetObjective(cost, maximize=False)
+    cost = set_objective(solver, G, prod_price, prod_inertia, buy_price, sell_price)
 
     t1 = time.time()
     print("Build time: {0:.3f}".format(t1 - t0))
-
-    #exit(0)
 
     # solving
     solver.Solve(time_limit=10)
 
     # presenting
-    P_solved = [solver.solution_value(p) for p in P]
+    Plant = G.nodes["plant"]["div"]
+    Buy = G.nodes["buy"]["div"]
+    Sell = -G.nodes["sell"]["div"]
+    Prod = G.edges["production", "x0"]["flow"]
+    acc_in_flow = G.edges["x0", "acc"]["flow"]
+    acc_out_flow = G.edges["acc", "xc"]["flow"]
+    acc_balance = G.edges["acc", "acc"]["flow"]
+    Plant_solved = [solver.solution_value(p) for p in Plant]
     Prod_solved = [solver.solution_value(p) for p in Prod]
     T_solved = [solver.solution_value(x) for x in G.nodes["xc"]["out_flow"]]
-    #Tx0_solved = [solver.solution_value(x) for x in G.nodes["x0"]["vals"]]
-    acc_in = [solver.solution_value(a) for a in acc.in_flow]
-    acc_out = [solver.solution_value(a) for a in acc.out_flow]
-    acc_balance = [solver.solution_value(a) for a in acc.balance]
+    acc_in = [solver.solution_value(a) for a in acc_in_flow]
+    acc_out = [solver.solution_value(a) for a in acc_out_flow]
+    acc_balance = [solver.solution_value(a) for a in acc_balance]
     #manual_balance = np.cumsum(np.array(acc_in[:-4]) - np.array(acc_out[4:]))
     #print(manual_balance)
     #T_pipe_solved = [[solver.solution_value(xt) for xt in x] for x in X]
@@ -237,13 +264,13 @@ def plan():
     cost_solved = solver.solution_value(cost)
     print("Total cost: {0:.1f}".format(cost_solved))
     print("Sum of demand: {0:.3f}".format(sum(demand)))
-    print("Sum of production: {0:.3f}".format(sum(P_solved)))
+    print("Sum of production: {0:.3f}".format(sum(Prod_solved)))
 
     x = list(range(48, T-24))
     fig, (ax_power, ax_acc, ax_market) = plt.subplots(nrows=3, sharex=True)
     #fig, ax_power = plt.subplots(nrows=1, sharex=True)
-    ax_power.step(x, Prod_solved[48:-24], color='b')
-    ax_power.step(x, P_solved[48:-24], color='b', linestyle="--")
+    ax_power.step(x, Plant_solved[48:-24], color='b')
+    ax_power.step(x, Prod_solved[48:-24], color='b', linestyle="--")
     ax_power.step(x, demand[48:-24], color='r')
     ax_power.step(x, T_solved[48:-24], color='g')
     #ax_power.step(x, Tx0_solved)    
