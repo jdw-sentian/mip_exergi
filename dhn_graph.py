@@ -184,8 +184,6 @@ class DHNGraph(nx.DiGraph):
         for x_name, y_name, data in G.edges(data=True):
             data["flow"] = np.array([solver.solution_value(f) for f in data["flow"][t_start:t_end]])
 
-        #self.set_T_from()
-
         return G
 
 # the below are abstract, and could be moved to a utils module
