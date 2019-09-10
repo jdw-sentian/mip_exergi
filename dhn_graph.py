@@ -1,4 +1,6 @@
 # District heating network graph
+from copy import deepcopy
+
 import numpy as np
 import networkx as nx
 
@@ -6,6 +8,7 @@ class DHNGraph(nx.DiGraph):
     def __init__(self, G, params):
         super(DHNGraph, self).__init__(G)
 
+        self.G = G
         self.max_production = params["max_production"]
         self.max_buy = params["max_buy"] 
         self.max_sell = params["max_sell"]
@@ -38,11 +41,11 @@ class DHNGraph(nx.DiGraph):
             self.T = len(flow)
             return
 
-        for _, div in self.nodes(data=True):
+        for _, div in self.nodes(data="div"):
             self.T = len(div)
             return
 
-        for _, _, flow in self.edges(data=True):
+        for _, _, flow in self.edges(data="flow"):
             self.T = len(flow)
             return
 
@@ -55,13 +58,13 @@ class DHNGraph(nx.DiGraph):
     def default_flow_val(self, T):
         return np.array([0]*T)
 
-    def set_divs(self, divs, default_div):
+    def set_divs(self, divs):
         for x_name, data in self.nodes(data=True):
             data["div"] = divs.get(x_name, self.default_div(self.T))
 
-    def set_flows(self, solver, flows, default_flow):
+    def set_flows(self, solver, flows):
         for x_name, y_name, data in self.edges(data=True):
-            data["flow"] = flows.get((x_name, y_name), self.default_flow(self.T))    
+            data["flow"] = flows.get((x_name, y_name), self.default_flow(solver, self.T))    
 
     def merge(self, legacy=None):
         if legacy is None:
@@ -131,7 +134,7 @@ class DHNGraph(nx.DiGraph):
 
         return in_flows
 
-    def divergence_constraints(self, solver, burn_in=0):
+    def divergence_constraints(self, solver, burn_in):
         """Constrain so that 
         out_flow - in_flow = divergence
         """
@@ -145,3 +148,51 @@ class DHNGraph(nx.DiGraph):
                 if t < burn_in:
                     continue
                 solver.Add(out_t - in_t == div_t)
+
+    def forward_temp_constraint(self, solver, xc, burn_in):
+        _, _, out_flows = zip(*self.edges(nbunch=xc, data="flow"))
+        out_flow = sum(out_flows)
+        for t, x_t in enumerate(out_flow):
+            if t < burn_in:
+                continue
+            solver.Add(x_t >= self.min_forward_temp)
+            solver.Add(x_t <= self.max_forward_temp)
+
+    def get_objective(self, solver, plant, buy, sell):
+        """Assuming just 1 plant, 1 buy entry, and 1 sell exit
+        """
+        Plant = self.nodes[plant]["div"]
+        Buy = self.nodes[buy]["div"]
+        Sell = -self.nodes[sell]["div"]
+        Prod = Plant + Buy - Sell
+        prod_base_cost = solver.Sum(Plant)
+        prod_inertia_cost = production_inertia_cost(solver, Plant)
+        prod_cost = self.prod_price*prod_base_cost + self.prod_inertia*prod_inertia_cost
+        cost = prod_cost + self.buy_price * solver.Sum(Buy) - self.sell_price * solver.Sum(Sell)
+        return cost
+
+    def extract_interval(self, solver, t_start=None, t_end=None):
+        if t_start is None:
+            t_start = 0
+        if t_end is None:
+            t_end = self.T
+
+        for x_name, data in self.nodes(data=True):
+            data["div"] = np.array([solver.solution_value(d) for d in data["div"][t_start:t_end]])
+
+        for x_name, y_name, data in self.edges(data=True):
+            data["flow"] = np.array([solver.solution_value(f) for f in data["flow"][t_start:t_end]])
+
+        return self
+
+# the below are abstract, and could be moved to a utils module
+
+def abs_diff_var(solver, val):
+    x = solver.NumVar(0)
+    solver.Add(x >= val)
+    solver.Add(x >= -val)
+    return x
+
+def production_inertia_cost(solver, P):
+    change_vars = [abs_diff_var(solver, p0 - p1) for p0, p1 in zip(P[:-1], P[1:])]
+    return solver.Sum(change_vars)
