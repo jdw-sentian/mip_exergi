@@ -317,8 +317,8 @@ def main():
     # parameters
     params = {}
     params["max_production"] = 100 # MW
-    params["max_buy"] = 0 # MW
-    params["max_sell"] = 0 # MW
+    params["max_buy"] = 20 # MW
+    params["max_sell"] = 20 # MW
     params["prod_price"] = 1 # € / MW
     params["prod_inertia"] = 0.2 # € / dMW/dt
     params["buy_price"] = 1.1 # € / MW
@@ -330,7 +330,7 @@ def main():
     params["min_forward_temp"] = 75
     params["max_forward_temp"] = 90
 
-    params["acc_max_balance"] = 0
+    params["acc_max_balance"] = 5
     params["acc_max_flow"] = 5
 
     G_legacy = plan(demand, t_start=24, t_end=72, **params)
