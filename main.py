@@ -20,16 +20,6 @@ def get_numvars(solver, lb, ub, N):
     return np.array([solver.NumVar(lb, ub) for _ in range(N)])
 
 
-def set_divs(G, divs, default_div):
-    for x_name, data in G.nodes(data=True):
-        data["div"] = divs.get(x_name, default_div())
-
-
-def set_flows(solver, G, flows, default_flow):
-    for x_name, y_name, data in G.edges(data=True):
-        data["flow"] = flows.get((x_name, y_name), default_flow())
-
-
 def merge(G, pre=None, post=None):
     if pre is None:
         pre = []
@@ -40,9 +30,6 @@ def merge(G, pre=None, post=None):
         pre_data = [p.nodes[x_name]["div"] for p in pre]
         post_data = [p.nodes[x_name]["div"] for p in post]
         data["div"] = np.concatenate(pre_data + [data["div"]] + post_data)
-        #pre_data = [p.nodes[x_name]["out_flow"] for p in pre]
-        #post_data = [p.nodes[x_name]["out_flow"] for p in post]
-        #data["out_flow"] = np.concatenate(pre_data + [data["out_flow"]] + post_data)
 
     for x_name, y_name, data in G.edges(data=True):
         pre_data = [p.edges[x_name, y_name]["flow"] for p in pre]
@@ -69,9 +56,7 @@ def bind_out_flows(solver, G, T):
             pulled = [solver.Sum(pull_t) for pull_t in zip(*active)]
         else:
             pulled = [0]*T
-        #remainder = [x_t - pull_t for x_t, pull_t in zip(x, pulled)]
         remainder = [solver.NumVar(0, 100) for _ in range(T)]
-        #[solver.Add(rem_t >= 0) for rem_t in remainder]
         n_passive = len(passive)
         for passive_t, rem_t in zip(zip(*passive), remainder):
             for pass_t in passive_t:
@@ -111,8 +96,6 @@ def bind_in_flows(solver, G, T):
 def get_T(G):
     """Assumes that all data have the same length in G
     """
-    #for _, data in G.nodes(data=True):
-    #    return len(data["div"])
     return len(G.nodes["consumer"]["div"])
 
 
@@ -160,7 +143,6 @@ def get_objective(solver, G, prod_price, prod_inertia, buy_price, sell_price):
     prod_inertia_cost = production_inertia_cost(solver, Plant)
     prod_cost = prod_price*prod_base_cost + prod_inertia*prod_inertia_cost
     cost = prod_cost + buy_price * solver.Sum(Buy) - sell_price * solver.Sum(Sell)
-    #solver.SetObjective(cost, maximize=False)
     return cost
 
 
@@ -202,7 +184,6 @@ def extract_interval(solver, G, t_start=None, t_end=None):
 
     for x_name, data in G.nodes(data=True):
         data["div"] = np.array([solver.solution_value(d) for d in data["div"][t_start:t_end]])
-        #data["out_flow"] = np.array([solver.solution_value(d) for d in data["out_flow"][t_start:t_end]])
 
     for x_name, y_name, data in G.edges(data=True):
         data["flow"] = np.array([solver.solution_value(f) for f in data["flow"][t_start:t_end]])
@@ -242,13 +223,9 @@ def plan(demand,
              ("acc", "xc"): get_numvars(solver, 0, acc_max_flow, T)
             }
     flows.update(custom_flows)
-    if pre_legacy is None:
-        T_full = T
-    else:
-        T_full = T #sum([get_T(G_l) for G_l in pre_legacy])
-    default_div = lambda: np.array([0]*T_full)
-    default_flow = lambda: get_numvars(solver, 0, max_flow, T_full)
-    default_flow_val = lambda: np.array([0]*T_full)
+    default_div = lambda: np.array([0]*T)
+    default_flow = lambda: get_numvars(solver, 0, max_flow, T)
+    default_flow_val = lambda: np.array([0]*T)
     set_divs(G, divs, default_div)
     set_flows(solver, G, flows, default_flow)
     if (pre_legacy is not None) or (post_legacy is not None):
@@ -347,19 +324,14 @@ def present(axes, G):
     demand = -G.nodes["consumer"]["div"]
 
     x = list(range(len(plant)))
-    #print("T:", len(plant))
-    #print(plant)
-    #fig, ax_power = plt.subplots(nrows=1, sharex=True)
     where = "post"
     ax_power.step(x, plant, color='b', where=where)
     ax_power.step(x, prod, color='b', linestyle="--", where=where)
     ax_power.step(x, demand, color='r', where=where)
     ax_power.step(x, customer_temp, color='g', where=where)
-    #ax_power.step(x, Tx0_solved)    
     ax_acc.step(x, acc_in, where=where)
     ax_acc.step(x, acc_balance, linewidth=3, where=where)
     ax_acc.step(x, acc_out, where=where)
-    #ax_acc.step(x[4:], manual_balance, color="r")
     ax_market.step(x, sell, where=where)
     ax_market.step(x, buy, linestyle="--", where=where)
 
