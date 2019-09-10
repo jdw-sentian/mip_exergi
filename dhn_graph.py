@@ -172,18 +172,21 @@ class DHNGraph(nx.DiGraph):
         return cost
 
     def extract_interval(self, solver, t_start=None, t_end=None):
+        G = nx.DiGraph(self)
         if t_start is None:
             t_start = 0
         if t_end is None:
             t_end = self.T
 
-        for x_name, data in self.nodes(data=True):
+        for x_name, data in G.nodes(data=True):
             data["div"] = np.array([solver.solution_value(d) for d in data["div"][t_start:t_end]])
 
-        for x_name, y_name, data in self.edges(data=True):
+        for x_name, y_name, data in G.edges(data=True):
             data["flow"] = np.array([solver.solution_value(f) for f in data["flow"][t_start:t_end]])
 
-        return self
+        #self.set_T_from()
+
+        return G
 
 # the below are abstract, and could be moved to a utils module
 

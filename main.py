@@ -22,6 +22,16 @@ def get_numvars(solver, lb, ub, N):
     return np.array([solver.NumVar(lb, ub) for _ in range(N)])
 
 
+def get_T(G):
+    for _, div in G.nodes(data="div"):
+        return len(div)
+
+    for _, _, flow in G.edges(data="flow"):
+        return len(flow)
+
+    return None
+
+
 def get_structure(delay):
     G = nx.DiGraph()
     G.add_node("plant")
@@ -120,10 +130,9 @@ def main():
     params["acc_max_flow"] = 5
 
     G_legacy = plan(demand, delay, params, t_start=24, t_end=72)
-    print("G.T:", G_legacy.T)
+    #print("G.T:", get_T(G_legacy))
     _, axes_legacy = plt.subplots(nrows=3, sharex=True)
     present(axes_legacy, G_legacy)
-    '''
     
     t0 = time.time()
     solver = get_solver("CBC")
@@ -132,13 +141,13 @@ def main():
                    "buy": get_numvars(solver, 0, params["max_buy"], 1),
                    "sell": -get_numvars(solver, 0, params["max_sell"], 1)
                    }
-    for _ in range(100):
+    for _ in range(1):
         demand = get_demand_forecast(num_days=2)
         dem0, dem_rest = demand[:1], demand[1:]
-        G0, _ = plan(solver=solver, demand=dem0, pre_legacy=[G_legacy], 
-                     custom_divs=custom_divs, burn_in=get_T(G_legacy), **params)
-        G, cost = plan(solver=solver, demand=dem_rest, pre_legacy=[G0], 
-                       burn_in=get_T(G_legacy), **params)
+        G0, _ = plan(solver=solver, demand=dem0, delay=delay, legacy=[G_legacy], 
+                     custom_divs=custom_divs, burn_in=get_T(G_legacy), params=params)
+        G, cost = plan(solver=solver, demand=dem_rest, delay=delay, legacy=[G0], 
+                       burn_in=get_T(G_legacy), params=params)
         costs.append(cost)
     solver.SetObjective(solver.Sum(costs), maximize=False)
     t1 = time.time()
@@ -150,6 +159,7 @@ def main():
 
     _, axes = plt.subplots(nrows=3, sharex=True)
     present(axes, G_solved)
+    '''
     '''
     plt.show()
 
