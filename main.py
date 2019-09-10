@@ -244,10 +244,9 @@ def plan(demand,
          max_temp, max_flow, delay,
          min_forward_temp, max_forward_temp,
          acc_max_flow, acc_max_balance,
-         t_start=None, t_end=None,
+         t_start=None, t_end=None, burn_in=None,
          custom_divs=None, custom_flows=None,
-         pre_legacy=None, post_legacy=None, solver=None,
-         add_constraints=True):
+         pre_legacy=None, post_legacy=None, solver=None):
     #t0 = time.time()
     if custom_divs is None:
         custom_divs = {}
@@ -286,18 +285,14 @@ def plan(demand,
     T_full = get_T(G)
     in_flows = bind_in_flows(solver, G, T_full)
     out_flows = bind_out_flows(solver, G, T_full)
-    if not pre_legacy:
-        burn_in = 1
-    else:
-        for G_legacy in pre_legacy:
-            burn_in = 0
-            for x_name in G_legacy:
-                burn_in += len(G_legacy.nodes[x_name]["div"])
-                break
-    if add_constraints:
-        divergence_constraints(solver, G, in_flows, out_flows,
-                               default_flow_val, burn_in=burn_in)
-        forward_temp_constraint(solver, G, min_forward_temp, max_forward_temp, burn_in)
+    if burn_in is None:
+        if not pre_legacy:
+            burn_in = 1
+        else:
+            burn_in = sum([get_T(G_l) for G_l in pre_legacy])
+    divergence_constraints(solver, G, in_flows, out_flows,
+                           default_flow_val, burn_in)
+    forward_temp_constraint(solver, G, min_forward_temp, max_forward_temp, burn_in)
 
     cost = set_objective(solver, G, prod_price, prod_inertia, buy_price, sell_price)
     if solve_all:
@@ -347,8 +342,9 @@ def main():
         demand = get_demand_forecast(num_days=2)
         dem0, dem_rest = demand[:1], demand[1:]
         G0, _ = plan(solver=solver, demand=dem0, pre_legacy=[G_legacy], 
-                     custom_divs=custom_divs, add_constraints=True, **params)
-        G, cost = plan(solver=solver, demand=dem_rest, pre_legacy=[G0], **params)
+                     custom_divs=custom_divs, burn_in=get_T(G_legacy), **params)
+        G, cost = plan(solver=solver, demand=dem_rest, pre_legacy=[G0], 
+                       burn_in=get_T(G_legacy), **params)
         costs.append(cost)
     solver.SetObjective(solver.Sum(costs), maximize=False)
 
