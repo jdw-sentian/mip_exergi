@@ -146,7 +146,7 @@ def main():
                    }
     Gs = []
     planned_hrs = 1
-    for _ in range(100):
+    for _ in range(1):
         demand = get_demand_forecast(num_days=2)[18:]
         dem0, dem_rest = demand[:planned_hrs], demand[planned_hrs:]
         G0, _ = plan(solver=solver, demand=dem0, delay=delay, legacy=[G_legacy], 
@@ -176,7 +176,7 @@ def main():
     '''
 
 def present_mc(Gs, costs, idx_legacy, idx_eval):
-    path = "/home/jdw/projects/exergi/results/gif"
+    path = "/home/jdw/sentian/exergi/results/gif"
 
     for idx, (G, cost) in enumerate(zip(Gs, costs)):
         fn = os.path.join(path, "{0:d}.png".format(idx))
