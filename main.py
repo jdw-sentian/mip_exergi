@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import networkx as nx
-
+import pydot
 from sentian_miami import get_solver
 
 from dhn_graph import DHNGraph
@@ -109,6 +109,12 @@ def plan(demand, delay, params,
 
 
 def main():
+    if 0:
+        path = "/home/jdw/sentian/exergi/results/"
+        filename = "district_heating_network"
+        to_png(filename, path, get_structure(5))
+        exit(0)
+
     np.random.seed(0)
     demand = get_demand_forecast(num_days=10)
 
@@ -124,6 +130,7 @@ def main():
     params["max_temp"] = 100
     params["max_flow"] = 100
     delay = 5 # time from production to consumer in time units
+    num_mc = 100 # number of sample scenarios to optimize upon
 
     params["min_forward_temp"] = 75
     params["max_forward_temp"] = 90
@@ -146,7 +153,7 @@ def main():
                    }
     Gs = []
     planned_hrs = 1
-    for _ in range(1):
+    for _ in range(num_mc):
         demand = get_demand_forecast(num_days=2)[18:]
         dem0, dem_rest = demand[:planned_hrs], demand[planned_hrs:]
         G0, _ = plan(solver=solver, demand=dem0, delay=delay, legacy=[G_legacy], 
@@ -243,6 +250,23 @@ def present(axes, G):
 
     ax_market.legend(["Sold power", "Bought power"], loc=1)
     ax_market.set_ylabel("Power MW")
+
+
+def to_png(filename, path, G):
+    for u, v, data in G.edges(data=True):
+        if data["active"]:
+            data["color"] = "green"
+
+    G.nodes["plant"]["color"] = "blue"
+    G.nodes["buy"]["color"] = "blue"
+    G.nodes["sell"]["color"] = "red"
+    G.nodes["consumer"]["color"] = "red"
+
+    f = os.path.join(path, "tmp.dot")
+    p = os.path.join(path, "{}.png".format(filename))
+    nx.drawing.nx_pydot.write_dot(G, f)
+    (graph,) = pydot.graph_from_dot_file(f)
+    graph.write_png(p)
 
 
 if __name__ == '__main__':
