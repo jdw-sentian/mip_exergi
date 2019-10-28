@@ -10,12 +10,32 @@ from sentian_miami import get_solver
 
 from dhn_graph import DHNGraph
 
+# parameters
+params = {}
+params["max_production"] = 100  # MW
+params["max_buy"] = 20  # MW
+params["max_sell"] = 20  # MW
+params["prod_price"] = 1  # € / MW
+params["prod_inertia"] = 0.2  # € / dMW/dt
+params["buy_price"] = 1.1  # € / MW
+params["sell_price"] = 0.9  # € / MW
+params["max_temp"] = 100
+params["max_flow"] = 100
+delay = 5  # time from production to consumer in time units
+
+params["min_forward_temp"] = 75
+params["max_forward_temp"] = 90
+
+params["acc_max_balance"] = 5
+params["acc_max_flow"] = 5
+
+
 def get_demand_forecast(num_days=1):
     # unit in hypothetical MW
     demand = np.array([30, 30, 30, 30, 30, 30,
-                     40, 50, 50, 50, 40, 30,
-                     30, 30, 40, 40, 50, 50,
-                     60, 60, 60, 50, 40, 30]*num_days) * 1.0
+                       40, 50, 50, 50, 40, 30,
+                       30, 30, 40, 40, 50, 50,
+                       60, 60, 60, 50, 40, 30]*num_days) * 1.0
     demand += np.random.normal(size=len(demand)) * 2
     return demand
 
@@ -34,7 +54,7 @@ def get_T(G):
     return None
 
 
-def get_structure(delay):
+def get_structure():
     G = nx.DiGraph()
     G.add_node("plant")
     G.add_node("buy")
@@ -61,7 +81,7 @@ def get_structure(delay):
     return G
 
 
-def plan(demand, delay, params,
+def plan(demand, params,
          t_start=None, t_end=None, burn_in=None,
          custom_divs=None, custom_flows=None,
          legacy=None, solver=None):
@@ -75,7 +95,7 @@ def plan(demand, delay, params,
     else:
         solve_all = False
     T = len(demand)
-    G = get_structure(delay)
+    G = get_structure()
     G = DHNGraph(G, params)
     divs = {"plant": get_numvars(solver, 0, G.max_production, T),
             "buy": get_numvars(solver, 0, G.max_buy, T),
@@ -109,36 +129,28 @@ def plan(demand, delay, params,
 
 
 def main():
+    np.random.seed(0)
+    demand = get_demand_forecast(num_days=10)
+
+    fig, axes = plt.subplots(nrows=3)
+    G = plan(demand, params)
+    present(axes, G)
+    plt.show()
+
+
+def main_mc():
     if 0:
-        path = "/home/jdw/sentian/exergi/results/"
+        path = "/home/jdw/projects/sentian/exergi/results/"
         filename = "district_heating_network"
         to_png(filename, path, get_structure(5))
         exit(0)
 
+    num_mc = 1  # number of sample scenarios to optimize upon
+    
     np.random.seed(0)
     demand = get_demand_forecast(num_days=10)
 
-    # parameters
-    params = {}
-    params["max_production"] = 100 # MW
-    params["max_buy"] = 20 # MW
-    params["max_sell"] = 20 # MW
-    params["prod_price"] = 1 # € / MW
-    params["prod_inertia"] = 0.2 # € / dMW/dt
-    params["buy_price"] = 1.1 # € / MW
-    params["sell_price"] = 0.9 # € / MW
-    params["max_temp"] = 100
-    params["max_flow"] = 100
-    delay = 5 # time from production to consumer in time units
-    num_mc = 100 # number of sample scenarios to optimize upon
-
-    params["min_forward_temp"] = 75
-    params["max_forward_temp"] = 90
-
-    params["acc_max_balance"] = 5
-    params["acc_max_flow"] = 5
-
-    G_legacy = plan(demand, delay, params, t_start=48, t_end=66)
+    G_legacy = plan(demand, params, t_start=48, t_end=66)
     #print("G.T:", get_T(G_legacy))
     idx_legacy = get_T(G_legacy)
     #_, axes_legacy = plt.subplots(nrows=3, sharex=True)
@@ -156,9 +168,9 @@ def main():
     for _ in range(num_mc):
         demand = get_demand_forecast(num_days=2)[18:]
         dem0, dem_rest = demand[:planned_hrs], demand[planned_hrs:]
-        G0, _ = plan(solver=solver, demand=dem0, delay=delay, legacy=[G_legacy], 
+        G0, _ = plan(solver=solver, demand=dem0, legacy=[G_legacy], 
                      custom_divs=custom_divs, burn_in=get_T(G_legacy), params=params)
-        G, cost = plan(solver=solver, demand=dem_rest, delay=delay, legacy=[G0], 
+        G, cost = plan(solver=solver, demand=dem_rest, legacy=[G0], 
                        burn_in=get_T(G_legacy), params=params)
         Gs.append(G)
         costs.append(cost)
@@ -177,13 +189,13 @@ def main():
     #ax_hist.hist(, bins=50)
 
     '''
-    _, axes = plt.subplots(nrows=3, sharex=True)
-    present(axes, G_solved)
-    plt.show()
     '''
+    _, axes = plt.subplots(nrows=3, sharex=True)
+    present(axes, Gs_solved[0])
+    plt.show()
 
 def present_mc(Gs, costs, idx_legacy, idx_eval):
-    path = "/home/jdw/sentian/exergi/results/gif"
+    path = "/home/jdw/projects/sentian/exergi/results/gif"
 
     for idx, (G, cost) in enumerate(zip(Gs, costs)):
         fn = os.path.join(path, "{0:d}.png".format(idx))
@@ -271,3 +283,4 @@ def to_png(filename, path, G):
 
 if __name__ == '__main__':
     main()
+    #main_mc()
