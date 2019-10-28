@@ -37,6 +37,7 @@ def get_demand_forecast(num_days=1):
                        30, 30, 40, 40, 50, 50,
                        60, 60, 60, 50, 40, 30]*num_days) * 1.0
     demand += np.random.normal(size=len(demand)) * 2
+    #demand *= 0
     return demand
 
 
@@ -64,19 +65,29 @@ def get_structure():
     G.add_node("x0")
     G.add_node("xc")
 
-    G.add_edge("plant", "production", **{"delay": 0, "active": False})
-    G.add_edge("buy", "production", **{"delay": 0, "active": False})
-    G.add_edge("production", "sell", **{"delay": 0, "active": True})
-    G.add_edge("production", "x0", **{"delay": 0, "active": False})
-    G.add_edge("xc", "consumer", **{"delay": 0, "active": True})
-    G.add_edge("x0", "xc", **{"delay": delay, "active": False})
-    G.add_edge("xc", "x0", **{"delay": delay, "active": False})
+    G.add_edge("plant", "production", 
+            **{"delay": 0, "heat_loss": 0, "active": False})
+    G.add_edge("buy", "production", 
+            **{"delay": 0, "heat_loss": 0, "active": False})
+    G.add_edge("production", "sell", 
+            **{"delay": 0, "heat_loss": 0, "active": True})
+    G.add_edge("production", "x0", 
+            **{"delay": 0, "heat_loss": 0, "active": False})
+    G.add_edge("xc", "consumer", 
+            **{"delay": 0, "heat_loss": 0, "active": True})
+    G.add_edge("x0", "xc", 
+            **{"delay": delay, "heat_loss": 0.02, "active": False})
+    G.add_edge("xc", "x0", 
+            **{"delay": delay, "heat_loss": 0.02, "active": False})
     
     # accumulator
     G.add_node("acc")
-    G.add_edge("acc", "acc", **{"delay": 1, "active": False})
-    G.add_edge("x0", "acc", **{"delay": 0, "active": True})
-    G.add_edge("acc", "xc", **{"delay": delay, "active": True})
+    G.add_edge("acc", "acc", 
+            **{"delay": 1, "heat_loss": 0, "active": False})
+    G.add_edge("x0", "acc", 
+            **{"delay": 0, "heat_loss": 0, "active": True})
+    G.add_edge("acc", "xc", 
+            **{"delay": delay, "heat_loss": 0.02, "active": True})
 
     return G
 

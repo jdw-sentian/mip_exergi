@@ -122,9 +122,12 @@ class DHNGraph(nx.DiGraph):
             in_flow = []
             flows = [data["flow"] for data in in_edges_data]
             delays = [data["delay"] for data in in_edges_data]
+            h_losses = [data["heat_loss"] for data in in_edges_data]
             for t in range(T):
                 # first version: no heat loss
-                in_flows_t = [flow[t - d] for flow, d in zip(flows, delays) if t - d >= 0]
+                in_flows_t = [flow[t - d] * (1 - h_loss)
+                                for flow, d, h_loss in 
+                                zip(flows, delays, h_losses) if t - d >= 0]
                 if len(in_flows_t):
                     in_flow_t = solver.Sum(in_flows_t)
                 else:
@@ -150,6 +153,10 @@ class DHNGraph(nx.DiGraph):
                 solver.Add(out_t - in_t == div_t)
 
     def forward_temp_constraint(self, solver, xc, burn_in):
+        """Takes in a customer node xc, 
+        constrains the total out flow 
+        of heat from this node to be within an interval
+        """
         _, _, out_flows = zip(*self.edges(nbunch=xc, data="flow"))
         out_flow = sum(out_flows)
         for t, x_t in enumerate(out_flow):
@@ -167,11 +174,16 @@ class DHNGraph(nx.DiGraph):
         Prod = Plant + Buy - Sell
         prod_base_cost = solver.Sum(Plant)
         prod_inertia_cost = production_inertia_cost(solver, Plant)
-        prod_cost = self.prod_price*prod_base_cost + self.prod_inertia*prod_inertia_cost
-        cost = prod_cost + self.buy_price * solver.Sum(Buy) - self.sell_price * solver.Sum(Sell)
+        cost =   self.prod_price*prod_base_cost \
+               + self.prod_inertia*prod_inertia_cost \
+               + self.buy_price * solver.Sum(Buy) \
+               - self.sell_price * solver.Sum(Sell)
         return cost
 
     def extract_interval(self, solver, t_start=None, t_end=None):
+        """
+        Return a graph with solution values, over a time interval
+        """
         G = nx.DiGraph(self)
         if t_start is None:
             t_start = 0
@@ -179,10 +191,12 @@ class DHNGraph(nx.DiGraph):
             t_end = self.T
 
         for x_name, data in G.nodes(data=True):
-            data["div"] = np.array([solver.solution_value(d) for d in data["div"][t_start:t_end]])
+            data["div"] = np.array([solver.solution_value(d) 
+                                    for d in data["div"][t_start:t_end]])
 
         for x_name, y_name, data in G.edges(data=True):
-            data["flow"] = np.array([solver.solution_value(f) for f in data["flow"][t_start:t_end]])
+            data["flow"] = np.array([solver.solution_value(f) 
+                                    for f in data["flow"][t_start:t_end]])
 
         return G
 
