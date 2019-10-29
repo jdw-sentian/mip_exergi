@@ -8,26 +8,8 @@ import networkx as nx
 import pydot
 from sentian_miami import get_solver
 
+from config import get_parameters, get_structure
 from dhn_graph import DHNGraph
-
-# parameters
-params = {}
-params["max_production"] = 100  # MW
-params["max_buy"] = 20  # MW
-params["max_sell"] = 20  # MW
-params["prod_price"] = 1  # € / MW
-params["prod_inertia"] = 0.2  # € / dMW/dt
-params["buy_price"] = 1.1  # € / MW
-params["sell_price"] = 0.9  # € / MW
-params["max_temp"] = 100
-params["max_flow"] = 100
-delay = 5  # time from production to consumer in time units
-
-params["min_forward_temp"] = 75
-params["max_forward_temp"] = 90
-
-params["acc_max_balance"] = 5
-params["acc_max_flow"] = 5
 
 
 def get_demand_forecast(num_days=1):
@@ -37,7 +19,6 @@ def get_demand_forecast(num_days=1):
                        30, 30, 40, 40, 50, 50,
                        60, 60, 60, 50, 40, 30]*num_days) * 1.0
     demand += np.random.normal(size=len(demand)) * 2
-    #demand *= 0
     return demand
 
 
@@ -53,43 +34,6 @@ def get_T(G):
         return len(flow)
 
     return None
-
-
-def get_structure():
-    G = nx.DiGraph()
-    G.add_node("plant")
-    G.add_node("buy")
-    G.add_node("sell")
-    G.add_node("production")
-    G.add_node("consumer")
-    G.add_node("x0")
-    G.add_node("xc")
-
-    G.add_edge("plant", "production", 
-            **{"delay": 0, "heat_loss": 0, "active": False})
-    G.add_edge("buy", "production", 
-            **{"delay": 0, "heat_loss": 0, "active": False})
-    G.add_edge("production", "sell", 
-            **{"delay": 0, "heat_loss": 0, "active": True})
-    G.add_edge("production", "x0", 
-            **{"delay": 0, "heat_loss": 0, "active": False})
-    G.add_edge("xc", "consumer", 
-            **{"delay": 0, "heat_loss": 0, "active": True})
-    G.add_edge("x0", "xc", 
-            **{"delay": delay, "heat_loss": 0.02, "active": False})
-    G.add_edge("xc", "x0", 
-            **{"delay": delay, "heat_loss": 0.02, "active": False})
-    
-    # accumulator
-    G.add_node("acc")
-    G.add_edge("acc", "acc", 
-            **{"delay": 1, "heat_loss": 0, "active": False})
-    G.add_edge("x0", "acc", 
-            **{"delay": 0, "heat_loss": 0, "active": True})
-    G.add_edge("acc", "xc", 
-            **{"delay": delay, "heat_loss": 0.02, "active": True})
-
-    return G
 
 
 def plan(demand, params,
@@ -142,6 +86,7 @@ def plan(demand, params,
 def main():
     np.random.seed(0)
     demand = get_demand_forecast(num_days=10)
+    params = get_parameters()
 
     fig, axes = plt.subplots(nrows=3)
     G = plan(demand, params)
@@ -160,6 +105,7 @@ def main_mc():
     
     np.random.seed(0)
     demand = get_demand_forecast(num_days=10)
+    params = get_parameters()
 
     G_legacy = plan(demand, params, t_start=48, t_end=66)
     #print("G.T:", get_T(G_legacy))

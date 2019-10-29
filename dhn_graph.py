@@ -66,7 +66,8 @@ class DHNGraph(nx.DiGraph):
 
     def set_flows(self, solver, flows):
         for x_name, y_name, data in self.edges(data=True):
-            data["flow"] = flows.get((x_name, y_name), self.default_flow(solver, self.T))    
+            data["flow"] = flows.get((x_name, y_name), 
+                                     self.default_flow(solver, self.T))    
 
     def merge(self, legacy=None):
         if legacy is None:
