@@ -4,6 +4,8 @@ from copy import deepcopy
 import numpy as np
 import networkx as nx
 
+from mip_utils import L1_energy
+
 class DHNGraph(nx.DiGraph):
     def __init__(self, G, params):
         super(DHNGraph, self).__init__(G)
@@ -104,7 +106,8 @@ class DHNGraph(nx.DiGraph):
             for passive_t, rem_t in zip(zip(*passive), remainder):
                 for pass_t in passive_t:
                     solver.Add(pass_t == rem_t / n_passive)
-            out_flows[x_name] = [rem_t + pull_t for rem_t, pull_t in zip(remainder, pulled)]
+            out_flows[x_name] = [rem_t + pull_t 
+                                 for rem_t, pull_t in zip(remainder, pulled)]
 
         return out_flows
 
@@ -124,7 +127,6 @@ class DHNGraph(nx.DiGraph):
             delays = [data["delay"] for data in in_edges_data]
             h_losses = [data["heat_loss"] for data in in_edges_data]
             for t in range(T):
-                # first version: no heat loss
                 in_flows_t = [flow[t - d] * (1 - h_loss)
                                 for flow, d, h_loss in 
                                 zip(flows, delays, h_losses) if t - d >= 0]
@@ -173,7 +175,7 @@ class DHNGraph(nx.DiGraph):
         Sell = -self.nodes[sell]["div"]
         Prod = Plant + Buy - Sell
         prod_base_cost = solver.Sum(Plant)
-        prod_inertia_cost = production_inertia_cost(solver, Plant)
+        prod_inertia_cost = L1_energy(solver, Plant)
         cost =   self.prod_price*prod_base_cost \
                + self.prod_inertia*prod_inertia_cost \
                + self.buy_price * solver.Sum(Buy) \
@@ -199,15 +201,3 @@ class DHNGraph(nx.DiGraph):
                                     for f in data["flow"][t_start:t_end]])
 
         return G
-
-# the below are abstract, and could be moved to a utils module
-
-def abs_diff_var(solver, val):
-    x = solver.NumVar(0)
-    solver.Add(x >= val)
-    solver.Add(x >= -val)
-    return x
-
-def production_inertia_cost(solver, P):
-    change_vars = [abs_diff_var(solver, p0 - p1) for p0, p1 in zip(P[:-1], P[1:])]
-    return solver.Sum(change_vars)
