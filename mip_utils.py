@@ -26,10 +26,18 @@ def inverse_cumulative(solver, values, S, max_sum):
     sum(values) > max_sum, will make model infeasible
     """
     N = len(values)
-
     # cumulative sums
     c_values = [solver.Sum(values[:(i+1)]) for i in range(N)]
+    return index_of_surpass(solver, c_values, S, max_sum)
 
+def index_of_surpass(solver, values, S, max_value):
+    """Returns one-hot that indicate the first value of
+    `values` that is larger than `S`.
+
+    Assumes that `values` is monotonously increasing.
+    Assumes that all values are less than `max_value`.
+    """
+    N = len(values)
     # indicates if the cumulative value is larger than S
     indicators = [solver.IntVar(0, 1) for _ in range(N)]
 
@@ -38,9 +46,9 @@ def inverse_cumulative(solver, values, S, max_sum):
 
     # bind indicators
     tol = 1e-6  # resolve ambiguity when c_val == S for some c_val
-    for ind, c_val in zip(indicators, c_values):
-        solver.Add(ind <= c_val / S)
-        solver.Add(ind >= (c_val - S) / (max_sum + tol - S) + tol)
+    for ind, val in zip(indicators, values):
+        solver.Add(ind <= val / S)
+        solver.Add(ind >= (val - S) / (max_value + tol - S) + tol)
 
     # bind thresholds
     for thres, ind0, ind1 in zip(thresholds, [0] + indicators, indicators):
