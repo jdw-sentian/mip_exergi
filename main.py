@@ -33,7 +33,7 @@ def get_T(G):
     return None
 
 
-def plan(demand, policy,
+def plan(demand, policy, structure=None,
          t_start=None, t_end=None, burn_in=None,
          custom_divs=None, custom_flows=None,
          legacy=None, solver=None):
@@ -46,7 +46,8 @@ def plan(demand, policy,
         solve_all = True
     else:
         solve_all = False
-    structure = get_structure()
+    if structure is None:
+        structure = get_structure()
     G = DHNGraph(structure, policy)
     G.T = len(demand)
     G.set_divs(solver, policy["divs"], demand)
@@ -72,10 +73,11 @@ def plan(demand, policy,
 def main():
     np.random.seed(0)
     demand = get_demand_forecast(num_days=10)
+    structure = get_structure("structure_debug")
     policy = get_policy("policy_debug")
 
     fig, axes = plt.subplots(nrows=3)
-    G = plan(demand, policy, burn_in=8)
+    G = plan(demand, policy, structure, burn_in=8)
     present(axes, G)
     plt.show()
 
@@ -138,9 +140,15 @@ def present_mc(Gs, costs, idx_legacy, idx_eval):
         plant = G.nodes["plant"]["div"]
         demand = -G.nodes["consumer"]["div"]
 
-        p_l, p_d, p_f = plant[:idx_legacy+1], plant[idx_legacy:idx_eval+1], plant[idx_eval:]
-        d_l, d_d, d_f = demand[:idx_legacy+1], demand[idx_legacy:idx_eval+1], demand[idx_eval:]
-        x_l, x_d, x_f = list(range(idx_legacy+1)), list(range(idx_legacy, idx_eval+1)), list(range(idx_eval, T))
+        p_l, p_d, p_f = plant[:idx_legacy+1], \
+                        plant[idx_legacy:idx_eval+1], \
+                        plant[idx_eval:]
+        d_l, d_d, d_f = demand[:idx_legacy+1], \
+                        demand[idx_legacy:idx_eval+1], \
+                        demand[idx_eval:]
+        x_l, x_d, x_f = list(range(idx_legacy+1)), \
+                        list(range(idx_legacy, idx_eval+1)), \
+                        list(range(idx_eval, T))
 
         where = "post"
         ax.step(x_l, p_l, color='b', where=where)
@@ -154,7 +162,9 @@ def present_mc(Gs, costs, idx_legacy, idx_eval):
         ax.legend(["Production", "Consumption"], loc=1)
         ax.set_xlabel("Time / h")
         ax.set_ylabel("Power / MW")
-        ax.set_title("MC MIP optimized. Standard=legacy, Bold=decision, Dashed=contingency")
+        title = "MC MIP optimized. Standard=legacy, Bold=decision, " + \
+                "Dashed=contingency"
+        ax.set_title(title)
 
         plt.savefig(fn)
         plt.close()
@@ -163,12 +173,16 @@ def present_mc(Gs, costs, idx_legacy, idx_eval):
 def present(axes, G):
     ax_power, ax_acc, ax_market = axes
     plant = G.nodes["plant"]["div"]
-    buy = G.nodes["buy"]["div"]
-    sell = -G.nodes["sell"]["div"]
-    prod = plant + buy - sell
-    acc_in = G.edges["x0", "acc"]["flow"]
-    acc_out = G.edges["acc", "xc"]["flow"]
-    acc_balance = G.edges["acc", "acc"]["flow"]
+    if "buy" in G:
+        buy = G.nodes["buy"]["div"]
+        sell = -G.nodes["sell"]["div"]
+        prod = plant + buy - sell
+    else:
+        prod = plant
+    if "acc" in G:
+        acc_in = G.edges["x0", "acc"]["flow"]
+        acc_out = G.edges["acc", "xc"]["flow"]
+        acc_balance = G.edges["acc", "acc"]["flow"]
     _, _, customer_temp = zip(*G.edges(nbunch="xc", data="flow"))
     customer_temp = sum(customer_temp)
     demand = -G.nodes["consumer"]["div"]
@@ -179,22 +193,22 @@ def present(axes, G):
     ax_power.step(x, prod, color='b', linestyle="--", where=where)
     ax_power.step(x, demand, color='r', where=where)
     ax_power.step(x, customer_temp, color='g', where=where)
-    ax_acc.step(x, acc_in, where=where)
-    ax_acc.step(x, acc_balance, linewidth=3, where=where)
-    ax_acc.step(x, acc_out, where=where)
-    ax_market.step(x, sell, where=where)
-    ax_market.step(x, buy, linestyle="--", where=where)
-
-    ax_power.legend(["Production", "Production + Market", "Demand", "Forward temperature"], loc=1)
+    ax_power.legend(["Production", "Production + Market", "Demand", \
+                     "Forward temperature"], loc=1)
     #ax_power.set_xlabel("Time / h")
     ax_power.set_ylabel("Power MW / Temp C")
     #ax_power.set_title("Total cost: {0:.1f}".format(cost_solved))
-
-    ax_acc.legend(["Accumulator in", "Acc balance", "Acc out"], loc=1)
-    ax_acc.set_ylabel("Power MW")
-
-    ax_market.legend(["Sold power", "Bought power"], loc=1)
-    ax_market.set_ylabel("Power MW")
+    if "acc" in G:
+        ax_acc.step(x, acc_in, where=where)
+        ax_acc.step(x, acc_balance, linewidth=3, where=where)
+        ax_acc.step(x, acc_out, where=where)
+        ax_acc.legend(["Accumulator in", "Acc balance", "Acc out"], loc=1)
+        ax_acc.set_ylabel("Power MW")
+    if "buy" in G:
+        ax_market.step(x, sell, where=where)
+        ax_market.step(x, buy, linestyle="--", where=where)
+        ax_market.legend(["Sold power", "Bought power"], loc=1)
+        ax_market.set_ylabel("Power MW")
 
 
 def to_png(filename, path, G):
@@ -219,11 +233,11 @@ def to_png(filename, path, G):
 
 
 if __name__ == '__main__':
-    if 1:
+    if 0:
         path = "/home/jdw/projects/sentian/exergi/results/"
         filename = "district_heating_network"
         to_png(filename, path, get_structure("structure_debug"))
-    elif 1:
+    elif 0:
         main()
     elif 1:
         main_mc()
