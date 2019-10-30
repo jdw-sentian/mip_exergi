@@ -8,7 +8,7 @@ import networkx as nx
 import pydot
 from sentian_miami import get_solver
 
-from config import get_parameters, get_structure
+from config import get_policy, get_structure
 from dhn_graph import DHNGraph
 
 
@@ -36,7 +36,7 @@ def get_T(G):
     return None
 
 
-def plan(demand, params,
+def plan(demand, policy,
          t_start=None, t_end=None, burn_in=None,
          custom_divs=None, custom_flows=None,
          legacy=None, solver=None):
@@ -51,7 +51,7 @@ def plan(demand, params,
         solve_all = False
     T = len(demand)
     G = get_structure()
-    G = DHNGraph(G, params)
+    G = DHNGraph(G, policy)
     divs = {"plant": get_numvars(solver, 0, G.max_production, T),
             "buy": get_numvars(solver, 0, G.max_buy, T),
             "sell": -get_numvars(solver, 0, G.max_sell, T),
@@ -86,10 +86,10 @@ def plan(demand, params,
 def main():
     np.random.seed(0)
     demand = get_demand_forecast(num_days=10)
-    params = get_parameters()
+    policy = get_policy()
 
     fig, axes = plt.subplots(nrows=3)
-    G = plan(demand, params)
+    G = plan(demand, policy)
     present(axes, G)
     plt.show()
 
@@ -105,9 +105,9 @@ def main_mc():
     
     np.random.seed(0)
     demand = get_demand_forecast(num_days=10)
-    params = get_parameters()
+    policy = get_policy()
 
-    G_legacy = plan(demand, params, t_start=48, t_end=66)
+    G_legacy = plan(demand, policy, t_start=48, t_end=66)
     #print("G.T:", get_T(G_legacy))
     idx_legacy = get_T(G_legacy)
     #_, axes_legacy = plt.subplots(nrows=3, sharex=True)
@@ -116,9 +116,9 @@ def main_mc():
     t0 = time.time()
     solver = get_solver("CBC")
     costs = []
-    custom_divs = {"plant": get_numvars(solver, 0, params["max_production"], 1),
-                   "buy": get_numvars(solver, 0, params["max_buy"], 1),
-                   "sell": -get_numvars(solver, 0, params["max_sell"], 1)
+    custom_divs = {"plant": get_numvars(solver, 0, policy["max_production"], 1),
+                   "buy": get_numvars(solver, 0, policy["max_buy"], 1),
+                   "sell": -get_numvars(solver, 0, policy["max_sell"], 1)
                    }
     Gs = []
     planned_hrs = 1
@@ -126,9 +126,9 @@ def main_mc():
         demand = get_demand_forecast(num_days=2)[18:]
         dem0, dem_rest = demand[:planned_hrs], demand[planned_hrs:]
         G0, _ = plan(solver=solver, demand=dem0, legacy=[G_legacy], 
-                     custom_divs=custom_divs, burn_in=get_T(G_legacy), params=params)
+                     custom_divs=custom_divs, burn_in=get_T(G_legacy), policy=policy)
         G, cost = plan(solver=solver, demand=dem_rest, legacy=[G0], 
-                       burn_in=get_T(G_legacy), params=params)
+                       burn_in=get_T(G_legacy), policy=policy)
         Gs.append(G)
         costs.append(cost)
     total_cost = solver.Sum(costs)

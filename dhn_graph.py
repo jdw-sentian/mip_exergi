@@ -7,23 +7,23 @@ import networkx as nx
 from mip_utils import L1_energy
 
 class DHNGraph(nx.DiGraph):
-    def __init__(self, G, params):
-        super(DHNGraph, self).__init__(G)
+    def __init__(self, structure, policy):
+        super(DHNGraph, self).__init__(structure)
 
         self.G = G
-        self.max_production = params["max_production"]
-        self.max_buy = params["max_buy"] 
-        self.max_sell = params["max_sell"]
-        self.prod_price = params["prod_price"] 
-        self.prod_inertia = params["prod_inertia"] 
-        self.buy_price = params["buy_price"] 
-        self.sell_price = params["sell_price"]
-        self.max_temp = params["max_temp"] 
-        self.max_flow = params["max_flow"] 
-        self.min_forward_temp = params["min_forward_temp"] 
-        self.max_forward_temp = params["max_forward_temp"]
-        self.acc_max_flow = params["acc_max_flow"] 
-        self.acc_max_balance = params["acc_max_balance"]
+        self.max_production = policy["max_production"]
+        self.max_buy = policy["max_buy"] 
+        self.max_sell = policy["max_sell"]
+        self.prod_price = policy["prod_price"] 
+        self.prod_inertia = policy["prod_inertia"] 
+        self.buy_price = policy["buy_price"] 
+        self.sell_price = policy["sell_price"]
+        self.max_temp = policy["max_temp"] 
+        self.max_flow = policy["max_flow"] 
+        self.min_forward_temp = policy["min_forward_temp"] 
+        self.max_forward_temp = policy["max_forward_temp"]
+        self.acc_max_flow = policy["acc_max_flow"] 
+        self.acc_max_balance = policy["acc_max_balance"]
         self.cold_init = 80 # inital value on cold start
 
     def set_T_from(self, divs=None, flows=None):

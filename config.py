@@ -52,36 +52,36 @@ def _get_structure_test():
 
     return G
 
-def get_parameters(parameters="parameters_1"):
+def get_policy(policy="policy_1"):
     """In the future, these definitions should come from files 
     instead of functions.
     """
-    if parameters == "parameters_1":
-        return _get_parameters_1()
-    elif parameters == "parameters_test":
-        return _get_parameters_test()
+    if policy == "policy_1":
+        return _get_policy_1()
+    elif policy == "policy_test":
+        return _get_policy_test()
 
-def _get_parameters_1():
-    params = {}
-    params["max_production"] = 100  # MW
-    params["max_buy"] = 20  # MW
-    params["max_sell"] = 20  # MW
-    params["prod_price"] = 1  # € / MW
-    params["prod_inertia"] = 0.2  # € / dMW/dt
-    params["buy_price"] = 1.1  # € / MW
-    params["sell_price"] = 0.9  # € / MW
-    params["max_temp"] = 100
-    params["max_flow"] = 100
+def _get_policy_1():
+    policy = {}
+    policy["max_production"] = 100  # MW
+    policy["max_buy"] = 20  # MW
+    policy["max_sell"] = 20  # MW
+    policy["prod_price"] = 1  # € / MW
+    policy["prod_inertia"] = 0.2  # € / dMW/dt
+    policy["buy_price"] = 1.1  # € / MW
+    policy["sell_price"] = 0.9  # € / MW
+    policy["max_temp"] = 100
+    policy["max_flow"] = 100
 
-    params["min_forward_temp"] = 75
-    params["max_forward_temp"] = 90
+    policy["min_forward_temp"] = 75
+    policy["max_forward_temp"] = 90
 
-    params["acc_max_balance"] = 5
-    params["acc_max_flow"] = 5
+    policy["acc_max_balance"] = 5
+    policy["acc_max_flow"] = 5
 
-    return params
+    return policy
 
-def _get_parameters_test():
-    params = {}
+def _get_policy_test():
+    policy = {}
 
-    return params
+    return policy
