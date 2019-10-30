@@ -65,7 +65,7 @@ def plan(demand, policy, structure=None,
                            policy["buyers"], policy["sellers"])
     if solve_all:
         solver.SetObjective(cost, maximize=False)
-        solver.Solve(time_limit=10)    
+        solver.Solve(time_limit=20)
         return G.extract_interval(solver, t_start, t_end)
     else:
         return G, cost
@@ -73,7 +73,7 @@ def plan(demand, policy, structure=None,
 
 def main():
     np.random.seed(0)
-    demand = get_demand_forecast(num_days=1)
+    demand = get_demand_forecast(num_days=3)
     structure = get_structure("structure_debug")
     policy = get_policy("policy_debug")
 
@@ -238,7 +238,7 @@ if __name__ == '__main__':
         path = "/home/jdw/projects/sentian/exergi/results/"
         filename = "district_heating_network"
         to_png(filename, path, get_structure("structure_debug"))
-    elif 0:
+    elif 1:
         main()
     elif 1:
         main_mc()

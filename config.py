@@ -131,8 +131,8 @@ def _get_policy_debug():
     policy["max_speed"] = 2
     policy["min_speed"] = 1
 
-    policy["min_forward_temp"] = 80
-    policy["max_forward_temp"] = 80
+    policy["min_forward_temp"] = 60
+    policy["max_forward_temp"] = 90
 
     policy["acc_max_balance"] = 5
     policy["acc_max_flow"] = 5

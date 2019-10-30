@@ -67,7 +67,7 @@ class DHNGraph(nx.DiGraph):
             if x_name in divs:
                 div_conf = divs[x_name]
                 if "data" in div_conf:
-                    div = demand[div_conf["data"]]
+                    div = demand[div_conf["data"]].to_numpy()
                 else:
                     div = get_numvars(solver, 
                                       div_conf["min"], div_conf["max"], self.T)
@@ -159,7 +159,7 @@ class DHNGraph(nx.DiGraph):
                 in_flows_t = []
                 for idx, (flow, d, h_loss) in enumerate(zip(flows, delays, h_losses)):
                     if d == 0:
-                        in_flows_t.append(flow * (1 - h_loss))
+                        in_flows_t.append(flow[t] * (1 - h_loss))
                     else:
                         horizon = ceil(d / self.min_speed)
                         if t < horizon:
@@ -172,10 +172,10 @@ class DHNGraph(nx.DiGraph):
                         flow_t, _ = f(solver, temps, speeds,
                                       d, max_total_flow,
                                       max_temp_value)
-                        in_flows_t.append(flow_t * (1 - h_loss))
+                        in_flows_t.append(flow_t)
                         # I just remembered the heat loss depends on 
                         # transfer time, in a nonlinear way. 
-                        # Well, that'll be a pain for another time. 
+                        # Well, that'll be a pain for another time.
                 if len(in_flows_t):
                     in_flow_t = solver.Sum(in_flows_t)
                 else:
@@ -199,6 +199,19 @@ class DHNGraph(nx.DiGraph):
                 if t < burn_in:
                     continue
                 solver.Add(out_t - in_t == div_t)
+                '''
+                except AttributeError as e:
+                    print("x_name:", x_name)
+                    print("t:", t)
+                    print("in_t:", in_t)
+                    print("out_t:", out_t)
+                    print("divt_t:", div_t)
+
+                    print("type(in_t):", type(in_t))
+                    print("type(out_t):", type(out_t))
+                    print("type(divt_t):", type(div_t))
+                    raise e
+                '''
 
     def forward_temp_constraint(self, solver, consumers, burn_in):
         """Takes in a container (set, list, etc) of customer nodes, 
