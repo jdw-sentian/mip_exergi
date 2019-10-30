@@ -52,33 +52,15 @@ def plan(demand, policy,
     G.set_divs(solver, policy["divs"], demand)
     G.set_flows(solver, policy["flows"])
     G.merge(legacy)
-    '''
-    divs = {"plant": get_numvars(solver, 0, G.max_production, T),
-            "buy": get_numvars(solver, 0, G.max_buy, T),
-            "sell": -get_numvars(solver, 0, G.max_sell, T),
-            "consumer": -demand
-            }
-    divs.update(custom_divs)
-    flows = {("acc", "acc"): get_numvars(solver, 0, G.acc_max_balance, T),
-             ("x0", "acc"): get_numvars(solver, 0, G.acc_max_flow, T),
-             ("acc", "xc"): get_numvars(solver, 0, G.acc_max_flow, T)
-            }
-    flows.update(custom_flows)
-    G.set_T_from(divs, flows)
-    G.set_divs(divs)
-    G.set_flows(solver, flows)
-    '''
     if burn_in is None:
         if not legacy:
             burn_in = 1
         else:
             burn_in = sum([G_l.T for G_l in legacy])
     G.divergence_constraints(solver, burn_in)
-    #G.forward_temp_constraint(solver, policy["consumers"], burn_in)
-    #cost = G.get_objective(solver, policy["plants"], 
-    #                       policy["buyers"], policy["sellers"])
-    G.forward_temp_constraint(solver, "xc", burn_in)
-    cost = G.get_objective(solver, "plant", "buy", "sell")
+    G.forward_temp_constraint(solver, policy["consumers"], burn_in)
+    cost = G.get_objective(solver, policy["plants"], 
+                           policy["buyers"], policy["sellers"])
     if solve_all:
         solver.SetObjective(cost, maximize=False)
         solver.Solve(time_limit=10)    

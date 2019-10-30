@@ -168,12 +168,12 @@ class DHNGraph(nx.DiGraph):
                     continue
                 solver.Add(out_t - in_t == div_t)
 
-    def forward_temp_constraint(self, solver, xc, burn_in):
-        """Takes in a customer node xc, 
+    def forward_temp_constraint(self, solver, consumers, burn_in):
+        """Takes in a container (set, list, etc) of customer nodes, 
         constrains the total out flow 
         of heat from this node to be within an interval
         """
-        _, _, out_flows = zip(*self.edges(nbunch=xc, data="flow"))
+        _, _, out_flows = zip(*self.edges(nbunch=consumers, data="flow"))
         out_flow = sum(out_flows)
         for t, x_t in enumerate(out_flow):
             if t < burn_in:
@@ -181,19 +181,18 @@ class DHNGraph(nx.DiGraph):
             solver.Add(x_t >= self.min_forward_temp)
             solver.Add(x_t <= self.max_forward_temp)
 
-    def get_objective(self, solver, plant, buy, sell):
+    def get_objective(self, solver, plants, buyers, sellers):
         """Assuming just 1 plant, 1 buy entry, and 1 sell exit
         """
-        Plant = self.nodes[plant]["div"]
-        Buy = self.nodes[buy]["div"]
-        Sell = -self.nodes[sell]["div"]
-        Prod = Plant + Buy - Sell
-        prod_base_cost = solver.Sum(Plant)
-        prod_inertia_cost = L1_energy(solver, Plant)
+        Plants = [self.nodes[plant]["div"] for plant in plants]
+        Buyers = [self.nodes[buy]["div"] for buy in buyers]
+        Sellers = [-self.nodes[sell]["div"] for sell in sellers]
+        prod_base_cost = solver.Sum([solver.Sum(Plant) for Plant in Plants])
+        prod_inertia_cost = solver.Sum([L1_energy(solver, Plant) for Plant in Plants])
         cost =   self.prod_price*prod_base_cost \
                + self.prod_inertia*prod_inertia_cost \
-               + self.buy_price * solver.Sum(Buy) \
-               - self.sell_price * solver.Sum(Sell)
+               + self.buy_price * solver.Sum([solver.Sum(Buy) for Buy in Buyers]) \
+               - self.sell_price * solver.Sum([solver.Sum(Sell) for Sell in Sellers])
         return cost
 
     def extract_interval(self, solver, t_start=None, t_end=None):
