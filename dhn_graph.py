@@ -11,17 +11,19 @@ class DHNGraph(nx.DiGraph):
         super(DHNGraph, self).__init__(structure)
 
         self.max_production = policy["max_production"]
-        self.max_buy = policy["max_buy"] 
+        self.max_buy = policy["max_buy"]
         self.max_sell = policy["max_sell"]
-        self.prod_price = policy["prod_price"] 
-        self.prod_inertia = policy["prod_inertia"] 
-        self.buy_price = policy["buy_price"] 
+        self.prod_price = policy["prod_price"]
+        self.prod_inertia = policy["prod_inertia"]
+        self.buy_price = policy["buy_price"]
         self.sell_price = policy["sell_price"]
-        self.max_temp = policy["max_temp"] 
-        self.max_flow = policy["max_flow"] 
-        self.min_forward_temp = policy["min_forward_temp"] 
+        self.max_temp = policy["max_temp"]
+        self.max_flow = policy["max_flow"]
+        self.max_speed = policy["max_speed"]
+        self.min_speed = policy["min_speed"]
+        self.min_forward_temp = policy["min_forward_temp"]
         self.max_forward_temp = policy["max_forward_temp"]
-        self.acc_max_flow = policy["acc_max_flow"] 
+        self.acc_max_flow = policy["acc_max_flow"]
         self.acc_max_balance = policy["acc_max_balance"]
         self.cold_init = 80 # inital value on cold start
 
@@ -97,7 +99,7 @@ class DHNGraph(nx.DiGraph):
         self.set_T_from()
 
     def bind_out_flows(self, solver, T):
-        """Constraints for out flows
+        """Structural constraints for out flows
         actives are free variables, bound only by resource constraint
         passives split remaining flow equally
         """
@@ -107,7 +109,7 @@ class DHNGraph(nx.DiGraph):
             try:
                 _, _, out_edges_data = zip(*out_edges)
             except ValueError:
-                # if there are no out edges, skip constraints
+                # there are no out edges, skip constraints
                 continue
             active = [data["flow"] for data in out_edges_data if data["active"]]
             passive = [data["flow"] for data in out_edges_data if not data["active"]]
@@ -126,7 +128,7 @@ class DHNGraph(nx.DiGraph):
         return out_flows
 
     def bind_in_flows(self, solver, T):
-        """Constraints for in flows
+        """Structural constraints for in flows
         """
         in_flows = {}
         for x_name in self:
@@ -134,13 +136,14 @@ class DHNGraph(nx.DiGraph):
             try:
                 _, _, in_edges_data = zip(*in_edges)
             except ValueError:
-                # if there are no in edges, skip constraints
+                # there are no in edges, skip constraints
                 continue
             in_flow = []
             flows = [data["flow"] for data in in_edges_data]
             delays = [data["delay"] for data in in_edges_data]
             h_losses = [data["heat_loss"] for data in in_edges_data]
             for t in range(T):
+                # add speed modulation here
                 in_flows_t = [flow[t - d] * (1 - h_loss)
                                 for flow, d, h_loss in 
                                 zip(flows, delays, h_losses) if t - d >= 0]

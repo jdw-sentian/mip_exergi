@@ -81,12 +81,6 @@ def main():
 
 
 def main_mc():
-    if 0:
-        path = "/home/jdw/projects/sentian/exergi/results/"
-        filename = "district_heating_network"
-        to_png(filename, path, get_structure())
-        exit(0)
-
     num_mc = 10  # number of sample scenarios to optimize upon
     
     np.random.seed(0)
@@ -208,10 +202,14 @@ def to_png(filename, path, G):
         if data["active"]:
             data["color"] = "green"
 
-    G.nodes["plant"]["color"] = "blue"
-    G.nodes["buy"]["color"] = "blue"
-    G.nodes["sell"]["color"] = "red"
-    G.nodes["consumer"]["color"] = "red"
+    if "plant" in G:
+        G.nodes["plant"]["color"] = "blue"
+    if "buy" in G:
+        G.nodes["buy"]["color"] = "blue"
+    if "sell" in G:
+        G.nodes["sell"]["color"] = "red"
+    if "consumer" in G:
+        G.nodes["consumer"]["color"] = "red"
 
     f = os.path.join(path, "tmp.dot")
     p = os.path.join(path, "{}.png".format(filename))
@@ -221,7 +219,13 @@ def to_png(filename, path, G):
 
 
 if __name__ == '__main__':
-    #main()
-    main_mc()
+    if 1:
+        path = "/home/jdw/projects/sentian/exergi/results/"
+        filename = "district_heating_network"
+        to_png(filename, path, get_structure("structure_debug"))
+    elif 1:
+        main()
+    elif 1:
+        main_mc()
     #demand = get_demand_forecast(num_days=3)
     #print(demand["demand_0"])
