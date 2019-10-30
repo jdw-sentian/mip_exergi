@@ -52,6 +52,7 @@ def plan(demand, policy, structure=None,
     G.T = len(demand)
     G.set_divs(solver, policy["divs"], demand)
     G.set_flows(solver, policy["flows"])
+    G.set_speeds(solver)
     G.merge(legacy)
     if burn_in is None:
         if not legacy:
@@ -72,7 +73,7 @@ def plan(demand, policy, structure=None,
 
 def main():
     np.random.seed(0)
-    demand = get_demand_forecast(num_days=10)
+    demand = get_demand_forecast(num_days=1)
     structure = get_structure("structure_debug")
     policy = get_policy("policy_debug")
 

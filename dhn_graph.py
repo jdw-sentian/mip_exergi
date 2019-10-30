@@ -1,10 +1,11 @@
 # District heating network graph
 from copy import deepcopy
 
+from math import ceil
 import numpy as np
 import networkx as nx
 
-from mip_utils import L1_energy, get_numvars
+from mip_utils import L1_energy, get_numvars, inverse_cumulative_element
 
 class DHNGraph(nx.DiGraph):
     def __init__(self, structure, policy):
@@ -84,6 +85,14 @@ class DHNGraph(nx.DiGraph):
                 flow = self.default_flow(solver, self.T)
             data["flow"] = flow
 
+    def set_speeds(self, solver):
+        self.speeds = get_numvars(solver, 
+                                  self.min_speed, self.max_speed, self.T)
+        #max_delay = max(self.edges(data="delay"))
+        #self.max_horizon = ceil(max_delay / self.min_speed)
+        #self.max_total_flow = max_horizon * self.max_speed
+        #self.max_temp_value = self.max_flow
+
     def merge(self, legacy=None):
         if legacy is None:
             return
@@ -98,7 +107,7 @@ class DHNGraph(nx.DiGraph):
 
         self.set_T_from()
 
-    def bind_out_flows(self, solver, T):
+    def bind_out_flows(self, solver):
         """Structural constraints for out flows
         actives are free variables, bound only by resource constraint
         passives split remaining flow equally
@@ -116,8 +125,8 @@ class DHNGraph(nx.DiGraph):
             if len(active):
                 pulled = [solver.Sum(pull_t) for pull_t in zip(*active)]
             else:
-                pulled = [0]*T
-            remainder = [solver.NumVar(0, 100) for _ in range(T)]
+                pulled = [0]*self.T
+            remainder = get_numvars(solver, 0, self.max_flow, self.T)
             n_passive = len(passive)
             for passive_t, rem_t in zip(zip(*passive), remainder):
                 for pass_t in passive_t:
@@ -127,7 +136,7 @@ class DHNGraph(nx.DiGraph):
 
         return out_flows
 
-    def bind_in_flows(self, solver, T):
+    def bind_in_flows(self, solver):
         """Structural constraints for in flows
         """
         in_flows = {}
@@ -142,11 +151,31 @@ class DHNGraph(nx.DiGraph):
             flows = [data["flow"] for data in in_edges_data]
             delays = [data["delay"] for data in in_edges_data]
             h_losses = [data["heat_loss"] for data in in_edges_data]
-            for t in range(T):
+            for t in range(self.T):
                 # add speed modulation here
-                in_flows_t = [flow[t - d] * (1 - h_loss)
-                                for flow, d, h_loss in 
-                                zip(flows, delays, h_losses) if t - d >= 0]
+                #in_flows_t = [flow[t - d] * (1 - h_loss)
+                #                 if t - d >= 0]
+
+                in_flows_t = []
+                for idx, (flow, d, h_loss) in enumerate(zip(flows, delays, h_losses)):
+                    if d == 0:
+                        in_flows_t.append(flow * (1 - h_loss))
+                    else:
+                        horizon = ceil(d / self.min_speed)
+                        if t < horizon:
+                            continue
+                        temps = flows[idx][t-horizon:t]
+                        speeds = self.speeds[t-horizon:t]
+                        max_total_flow = horizon * self.max_speed
+                        max_temp_value = self.max_flow
+                        f = inverse_cumulative_element
+                        flow_t, _ = f(solver, temps, speeds,
+                                      d, max_total_flow,
+                                      max_temp_value)
+                        in_flows_t.append(flow_t * (1 - h_loss))
+                        # I just remembered the heat loss depends on 
+                        # transfer time, in a nonlinear way. 
+                        # Well, that'll be a pain for another time. 
                 if len(in_flows_t):
                     in_flow_t = solver.Sum(in_flows_t)
                 else:
@@ -160,8 +189,8 @@ class DHNGraph(nx.DiGraph):
         """Constrain so that 
         out_flow - in_flow = divergence
         """
-        in_flows = self.bind_in_flows(solver, self.T)
-        out_flows = self.bind_out_flows(solver, self.T)
+        in_flows = self.bind_in_flows(solver)
+        out_flows = self.bind_out_flows(solver)
         for x_name in self:
             in_flow = in_flows.get(x_name, self.default_flow_val(self.T))
             out_flow = out_flows.get(x_name, self.default_flow_val(self.T))
