@@ -84,10 +84,10 @@ def main_mc():
     if 0:
         path = "/home/jdw/projects/sentian/exergi/results/"
         filename = "district_heating_network"
-        to_png(filename, path, get_structure(5))
+        to_png(filename, path, get_structure())
         exit(0)
 
-    num_mc = 1  # number of sample scenarios to optimize upon
+    num_mc = 10  # number of sample scenarios to optimize upon
     
     np.random.seed(0)
     demand = get_demand_forecast(num_days=10)
@@ -128,9 +128,9 @@ def main_mc():
     #ax_hist.hist(, bins=50)
 
     '''
-    '''
     _, axes = plt.subplots(nrows=3, sharex=True)
     present(axes, Gs_solved[0])
+    '''
     plt.show()
 
 def present_mc(Gs, costs, idx_legacy, idx_eval):
@@ -221,7 +221,7 @@ def to_png(filename, path, G):
 
 
 if __name__ == '__main__':
-    main()
-    #main_mc()
+    #main()
+    main_mc()
     #demand = get_demand_forecast(num_days=3)
     #print(demand["demand_0"])
