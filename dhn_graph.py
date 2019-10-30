@@ -4,13 +4,12 @@ from copy import deepcopy
 import numpy as np
 import networkx as nx
 
-from mip_utils import L1_energy
+from mip_utils import L1_energy, get_numvars
 
 class DHNGraph(nx.DiGraph):
     def __init__(self, structure, policy):
         super(DHNGraph, self).__init__(structure)
 
-        self.G = G
         self.max_production = policy["max_production"]
         self.max_buy = policy["max_buy"] 
         self.max_sell = policy["max_sell"]
@@ -60,18 +59,32 @@ class DHNGraph(nx.DiGraph):
     def default_flow_val(self, T):
         return np.array([0]*T)
 
-    def set_divs(self, divs):
+    def set_divs(self, solver, divs, demand):
         for x_name, data in self.nodes(data=True):
-            data["div"] = divs.get(x_name, self.default_div(self.T))
+            if x_name in divs:
+                div_conf = divs[x_name]
+                if "data" in div_conf:
+                    div = demand[div_conf["data"]]
+                else:
+                    div = get_numvars(solver, 
+                                      div_conf["min"], div_conf["max"], self.T)
+            else:
+                div = self.default_div(self.T)
+            data["div"] = div
 
     def set_flows(self, solver, flows):
         for x_name, y_name, data in self.edges(data=True):
-            data["flow"] = flows.get((x_name, y_name), 
-                                     self.default_flow(solver, self.T))    
+            if (x_name, y_name) in flows:
+                flow_conf = flows[(x_name, y_name)]
+                flow = get_numvars(solver, 
+                                   flow_conf["min"], flow_conf["max"], self.T)
+            else:
+                flow = self.default_flow(solver, self.T)
+            data["flow"] = flow
 
     def merge(self, legacy=None):
         if legacy is None:
-            legacy = []
+            return
 
         for x_name, data in self.nodes(data=True):
             legacy_data = [p.nodes[x_name]["div"] for p in legacy]

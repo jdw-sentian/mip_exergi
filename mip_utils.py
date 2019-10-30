@@ -1,10 +1,16 @@
+import numpy as np
+
 from sentian_miami import get_solver
+
+def get_numvars(solver, lb, ub, N):
+    return np.array([solver.NumVar(lb, ub) for _ in range(N)])
 
 def abs_var(solver, val):
     x = solver.NumVar(0)
     solver.Add(x >= val)
     solver.Add(x >= -val)
     return x
+
 
 def L1_energy(solver, P):
     """L1 energy is integral of abs of derivative
@@ -13,6 +19,7 @@ def L1_energy(solver, P):
     """
     change_vars = [abs_var(solver, p0 - p1) for p0, p1 in zip(P, P[1:])]
     return solver.Sum(change_vars)
+
 
 def inverse_cumulative(solver, values, S, max_sum):
     """At what index does the cumulative sum of `values`
@@ -29,6 +36,7 @@ def inverse_cumulative(solver, values, S, max_sum):
     # cumulative sums
     c_values = [solver.Sum(values[:(i+1)]) for i in range(N)]
     return index_of_surpass(solver, c_values, S, max_sum)
+
 
 def index_of_surpass(solver, values, S, max_value):
     """Returns one-hot that indicate the first value of

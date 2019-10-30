@@ -4,6 +4,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 
+import pandas as pd
 import networkx as nx
 import pydot
 from sentian_miami import get_solver
@@ -19,11 +20,7 @@ def get_demand_forecast(num_days=1):
                        30, 30, 40, 40, 50, 50,
                        60, 60, 60, 50, 40, 30]*num_days) * 1.0
     demand += np.random.normal(size=len(demand)) * 2
-    return demand
-
-
-def get_numvars(solver, lb, ub, N):
-    return np.array([solver.NumVar(lb, ub) for _ in range(N)])
+    return pd.DataFrame({"demand_0": -demand})
 
 
 def get_T(G):
@@ -49,9 +46,13 @@ def plan(demand, policy,
         solve_all = True
     else:
         solve_all = False
-    T = len(demand)
-    G = get_structure()
-    G = DHNGraph(G, policy)
+    structure = get_structure()
+    G = DHNGraph(structure, policy)
+    G.T = len(demand)
+    G.set_divs(solver, policy["divs"], demand)
+    G.set_flows(solver, policy["flows"])
+    G.merge(legacy)
+    '''
     divs = {"plant": get_numvars(solver, 0, G.max_production, T),
             "buy": get_numvars(solver, 0, G.max_buy, T),
             "sell": -get_numvars(solver, 0, G.max_sell, T),
@@ -66,13 +67,16 @@ def plan(demand, policy,
     G.set_T_from(divs, flows)
     G.set_divs(divs)
     G.set_flows(solver, flows)
-    G.merge(legacy)
+    '''
     if burn_in is None:
         if not legacy:
             burn_in = 1
         else:
             burn_in = sum([G_l.T for G_l in legacy])
     G.divergence_constraints(solver, burn_in)
+    #G.forward_temp_constraint(solver, policy["consumers"], burn_in)
+    #cost = G.get_objective(solver, policy["plants"], 
+    #                       policy["buyers"], policy["sellers"])
     G.forward_temp_constraint(solver, "xc", burn_in)
     cost = G.get_objective(solver, "plant", "buy", "sell")
     if solve_all:
@@ -86,10 +90,10 @@ def plan(demand, policy,
 def main():
     np.random.seed(0)
     demand = get_demand_forecast(num_days=10)
-    policy = get_policy()
+    policy = get_policy("policy_debug")
 
     fig, axes = plt.subplots(nrows=3)
-    G = plan(demand, policy)
+    G = plan(demand, policy, burn_in=8)
     present(axes, G)
     plt.show()
 
@@ -116,17 +120,13 @@ def main_mc():
     t0 = time.time()
     solver = get_solver("CBC")
     costs = []
-    custom_divs = {"plant": get_numvars(solver, 0, policy["max_production"], 1),
-                   "buy": get_numvars(solver, 0, policy["max_buy"], 1),
-                   "sell": -get_numvars(solver, 0, policy["max_sell"], 1)
-                   }
     Gs = []
     planned_hrs = 1
     for _ in range(num_mc):
-        demand = get_demand_forecast(num_days=2)[18:]
-        dem0, dem_rest = demand[:planned_hrs], demand[planned_hrs:]
+        demand = get_demand_forecast(num_days=2).iloc[18:]
+        dem0, dem_rest = demand.iloc[:planned_hrs], demand.iloc[planned_hrs:]
         G0, _ = plan(solver=solver, demand=dem0, legacy=[G_legacy], 
-                     custom_divs=custom_divs, burn_in=get_T(G_legacy), policy=policy)
+                     burn_in=get_T(G_legacy), policy=policy)
         G, cost = plan(solver=solver, demand=dem_rest, legacy=[G0], 
                        burn_in=get_T(G_legacy), policy=policy)
         Gs.append(G)
@@ -241,3 +241,5 @@ def to_png(filename, path, G):
 if __name__ == '__main__':
     main()
     #main_mc()
+    #demand = get_demand_forecast(num_days=3)
+    #print(demand["demand_0"])
