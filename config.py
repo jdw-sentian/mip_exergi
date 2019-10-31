@@ -113,6 +113,8 @@ def _get_policy_1():
     policy["buyers"] = ["buy"]
     policy["sellers"] = ["sell"]
 
+    policy["num_axes"] = 4  # for plotting
+
     return policy
 
 
@@ -128,10 +130,10 @@ def _get_policy_debug():
     policy["max_temp"] = 100
     policy["max_flow"] = 100
 
-    policy["max_speed"] = 2
-    policy["min_speed"] = 1
+    policy["max_speed"] = 5
+    policy["min_speed"] = 0.5
 
-    policy["min_forward_temp"] = 60
+    policy["min_forward_temp"] = 65
     policy["max_forward_temp"] = 90
 
     policy["acc_max_balance"] = 5
@@ -147,5 +149,7 @@ def _get_policy_debug():
     policy["plants"] = ["plant"]
     policy["buyers"] = []
     policy["sellers"] = []
+
+    policy["num_axes"] = 2  # for plotting
 
     return policy

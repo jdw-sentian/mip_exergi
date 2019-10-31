@@ -66,21 +66,31 @@ def plan(demand, policy, structure=None,
     if solve_all:
         solver.SetObjective(cost, maximize=False)
         solver.Solve(time_limit=20)
+        print("score: {0:.3f}".format(solver.solution_value(cost)))
         return G.extract_interval(solver, t_start, t_end)
     else:
         return G, cost
 
 
-def main():
-    np.random.seed(0)
-    demand = get_demand_forecast(num_days=3)
-    structure = get_structure("structure_debug")
-    policy = get_policy("policy_debug")
+def to_png(filename, path, G):
+    for u, v, data in G.edges(data=True):
+        if data["active"]:
+            data["color"] = "green"
 
-    fig, axes = plt.subplots(nrows=3)
-    G = plan(demand, policy, structure, burn_in=8)
-    present(axes, G)
-    plt.show()
+    if "plant" in G:
+        G.nodes["plant"]["color"] = "blue"
+    if "buy" in G:
+        G.nodes["buy"]["color"] = "blue"
+    if "sell" in G:
+        G.nodes["sell"]["color"] = "red"
+    if "consumer" in G:
+        G.nodes["consumer"]["color"] = "red"
+
+    f = os.path.join(path, "tmp.dot")
+    p = os.path.join(path, "{}.png".format(filename))
+    nx.drawing.nx_pydot.write_dot(G, f)
+    (graph,) = pydot.graph_from_dot_file(f)
+    graph.write_png(p)
 
 
 def main_mc():
@@ -172,8 +182,14 @@ def present_mc(Gs, costs, idx_legacy, idx_eval):
 
 
 def present(axes, G):
-    ax_power, ax_acc, ax_market = axes
+    if len(axes) == 2:
+        ax_power, ax_speed = axes
+    elif len(axes) == 4:
+        ax_power, ax_speed, ax_acc, ax_market = axes
     plant = G.nodes["plant"]["div"]
+    speeds = G.graph["speed"]
+    # why are speeds (almost) integer multiples of min_speed?
+    print("speeds: {}".format(set(np.round(speeds, decimals=2))))
     if "buy" in G:
         buy = G.nodes["buy"]["div"]
         sell = -G.nodes["sell"]["div"]
@@ -199,6 +215,11 @@ def present(axes, G):
     #ax_power.set_xlabel("Time / h")
     ax_power.set_ylabel("Power MW / Temp C")
     #ax_power.set_title("Total cost: {0:.1f}".format(cost_solved))
+
+    ax_speed.step(x, speeds, color='r', where=where)
+    ax_speed.set_ylabel("km / h")
+    ax_speed.legend(["Flow Speed"])
+
     if "acc" in G:
         ax_acc.step(x, acc_in, where=where)
         ax_acc.step(x, acc_balance, linewidth=3, where=where)
@@ -212,25 +233,16 @@ def present(axes, G):
         ax_market.set_ylabel("Power MW")
 
 
-def to_png(filename, path, G):
-    for u, v, data in G.edges(data=True):
-        if data["active"]:
-            data["color"] = "green"
+def main():
+    np.random.seed(0)
+    demand = get_demand_forecast(num_days=2)
+    structure = get_structure("structure_debug")
+    policy = get_policy("policy_debug")
 
-    if "plant" in G:
-        G.nodes["plant"]["color"] = "blue"
-    if "buy" in G:
-        G.nodes["buy"]["color"] = "blue"
-    if "sell" in G:
-        G.nodes["sell"]["color"] = "red"
-    if "consumer" in G:
-        G.nodes["consumer"]["color"] = "red"
-
-    f = os.path.join(path, "tmp.dot")
-    p = os.path.join(path, "{}.png".format(filename))
-    nx.drawing.nx_pydot.write_dot(G, f)
-    (graph,) = pydot.graph_from_dot_file(f)
-    graph.write_png(p)
+    fig, axes = plt.subplots(nrows=policy["num_axes"])
+    G = plan(demand, policy, structure, burn_in=24)
+    present(axes, G)
+    plt.show()
 
 
 if __name__ == '__main__':

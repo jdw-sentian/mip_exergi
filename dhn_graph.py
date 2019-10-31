@@ -258,4 +258,7 @@ class DHNGraph(nx.DiGraph):
             data["flow"] = np.array([solver.solution_value(f) 
                                     for f in data["flow"][t_start:t_end]])
 
+        G.graph["speed"] = np.array([solver.solution_value(speed)
+                                     for speed in self.speeds[t_start:t_end]])
+
         return G
