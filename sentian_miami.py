@@ -67,10 +67,10 @@ class SolverPyomo:
         self.top = 0
 
     def IntVar(self, lb=None, ub=None, name=None):
-        return self.Var(lb, ub, name, within=pe.Integers)
+        return self.Var(lb, ub, name, domain=pe.Integers)
 
     def NumVar(self, lb=None, ub=None, name=None):
-        return self.Var(lb, ub, name, within=pe.Reals)
+        return self.Var(lb, ub, name)
 
     def Var(self, lb=None, ub=None, name=None, **kwargs):
         var = pe.Var(bounds=(lb, ub), **kwargs)
@@ -93,10 +93,11 @@ class SolverPyomo:
         setattr(self.model, name, constraint)
         return constraint
 
-    def Solve(self, time_limit=None, verbose=False):
+    def Solve(self, time_limit=None, verbose=True):
         res = self.solver.solve(self.model)
         if verbose:
             res.write()
+            self.model.pprint()
 
     def SetObjective(self, expr, maximize):
         if maximize:
@@ -113,10 +114,13 @@ class SolverPyomo:
 
 
 def test_couenne_basic():
+    import numpy as np
+
     solver = get_solver("couenne")
 
     a = solver.NumVar(lb=11, ub=20)
     b = 10
+    array = np.array([a, b])
     #b = solver.NumVar(0, 2)
     c = a + b
     #d = 2*a + b
@@ -136,22 +140,24 @@ def test_couenne_basic():
 
 
 def test_couenne_nonlinear():
+    import numpy as np
 
     solver = get_solver("couenne")
 
-    a = solver.NumVar(0.2, 2)
-    b = solver.NumVar(0.2, 2)
+    #a = solver.NumVar(0.2, 2)
+    #b = solver.NumVar(0.2, 2)
+    a = np.array([solver.NumVar(0.1, 1) for _ in range(5)])
 
-    s = a + b
-    p = a * b
+    p = a[0]
+    for elem in a[1:]:
+        p = p * elem
 
-    solver.Add(solver.Sum([a, b, a, a]) <= 3)
+    solver.Add(solver.Sum(a) <= 3)
     solver.SetObjective(p, maximize=True)
 
     solver.Solve()
 
-    print("a:", solver.solution_value(a))
-    print("b:", solver.solution_value(b))
+    print("a:", [solver.solution_value(elem) for elem in a])
 
 
 if __name__ == '__main__':

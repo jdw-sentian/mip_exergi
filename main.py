@@ -44,6 +44,9 @@ def plan(demand, policy, structure=None,
     if solver is None:
         solver = get_solver("CBC")
         solve_all = True
+    elif type(solver) == type(""):
+        solver = get_solver(solver)
+        solve_all = True
     else:
         solve_all = False
     if structure is None:
@@ -189,7 +192,7 @@ def present(axes, G):
     plant = G.nodes["plant"]["div"]
     speeds = G.graph["speed"]
     # why are speeds (almost) integer multiples of min_speed?
-    print("speeds: {}".format(set(np.round(speeds, decimals=2))))
+    #print("speeds: {}".format(set(np.round(speeds, decimals=2))))
     if "buy" in G:
         buy = G.nodes["buy"]["div"]
         sell = -G.nodes["sell"]["div"]
@@ -235,12 +238,12 @@ def present(axes, G):
 
 def main():
     np.random.seed(0)
-    demand = get_demand_forecast(num_days=2)
+    demand = get_demand_forecast(num_days=1)
     structure = get_structure("structure_debug")
     policy = get_policy("policy_debug")
 
     fig, axes = plt.subplots(nrows=policy["num_axes"])
-    G = plan(demand, policy, structure, burn_in=24)
+    G = plan(demand, policy, structure, burn_in=12, solver="couenne")
     present(axes, G)
     plt.show()
 

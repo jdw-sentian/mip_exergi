@@ -54,13 +54,13 @@ class DHNGraph(nx.DiGraph):
             return
 
     def default_div(self, T):
-        return np.array([0]*T)
+        return [0]*T
 
     def default_flow(self, solver, T):
-        return np.array([solver.NumVar(0, self.max_flow) for _ in range(T)])
+        return [solver.NumVar(0, self.max_flow) for _ in range(T)]
 
     def default_flow_val(self, T):
-        return np.array([0]*T)
+        return [0]*T
 
     def set_divs(self, solver, divs, demand):
         for x_name, data in self.nodes(data=True):
@@ -219,7 +219,8 @@ class DHNGraph(nx.DiGraph):
         of heat from this node to be within an interval
         """
         _, _, out_flows = zip(*self.edges(nbunch=consumers, data="flow"))
-        out_flow = sum(out_flows)
+        #out_flow = sum(out_flows)
+        out_flow = [solver.Sum(out_flows_t) for out_flows_t in zip(*out_flows)]
         for t, x_t in enumerate(out_flow):
             if t < burn_in:
                 continue

@@ -48,7 +48,7 @@ def _get_structure_1():
     return G
 
 def _get_structure_debug():
-    delay = 5  # time from production to consumer in time units
+    delay = 0  # time from production to consumer in time units
 
     G = nx.DiGraph()
     G.add_node("plant")
@@ -120,26 +120,26 @@ def _get_policy_1():
 
 def _get_policy_debug():
     policy = {}
-    policy["max_production"] = 100  # MW
+    policy["max_production"] = 100.0  # MW
     policy["max_buy"] = 0  # MW
     policy["max_sell"] = 0  # MW
-    policy["prod_price"] = 0  # € / MW
-    policy["prod_inertia"] = 1  # € / dMW/dt
+    policy["prod_price"] = 1  # € / MW
+    policy["prod_inertia"] = 0  # € / dMW/dt
     policy["buy_price"] = 0  # € / MW
     policy["sell_price"] = 0  # € / MW
-    policy["max_temp"] = 100
-    policy["max_flow"] = 100
+    policy["max_temp"] = 100.0
+    policy["max_flow"] = 100.0
 
-    policy["max_speed"] = 3
+    policy["max_speed"] = 1
     policy["min_speed"] = 1
 
-    policy["min_forward_temp"] = 65
+    policy["min_forward_temp"] = 70
     policy["max_forward_temp"] = 90
 
     policy["acc_max_balance"] = 5
     policy["acc_max_flow"] = 5
 
-    policy["divs"] = {"plant": {"min": 0, "max": policy["max_production"]},
+    policy["divs"] = {"plant": {"min": 0.0, "max": policy["max_production"]},
                       "consumer": {"data": "demand_0"},
                       }
 

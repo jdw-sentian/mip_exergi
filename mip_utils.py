@@ -3,7 +3,7 @@ import numpy as np
 from sentian_miami import get_solver
 
 def get_numvars(solver, lb, ub, N):
-    return np.array([solver.NumVar(lb, ub) for _ in range(N)])
+    return [solver.NumVar(lb=lb, ub=ub) for _ in range(N)]
 
 def abs_var(solver, val):
     x = solver.NumVar(0)
