@@ -204,7 +204,7 @@ def present(axes, G):
         acc_out = G.edges["acc", "xc"]["flow"]
         acc_balance = G.edges["acc", "acc"]["flow"]
     _, _, customer_temp = zip(*G.edges(nbunch="xc", data="flow"))
-    customer_temp = sum(customer_temp)
+    #customer_temp = sum(customer_temp)
     demand = -G.nodes["consumer"]["div"]
 
     x = list(range(len(plant)))
@@ -212,16 +212,17 @@ def present(axes, G):
     ax_power.step(x, plant, color='b', where=where)
     ax_power.step(x, prod, color='b', linestyle="--", where=where)
     ax_power.step(x, demand, color='r', where=where)
-    ax_power.step(x, customer_temp, color='g', where=where)
+    #ax_power.step(x, customer_temp, color='g', where=where)
     ax_power.legend(["Production", "Production + Market", "Demand", \
                      "Forward temperature"], loc=1)
     #ax_power.set_xlabel("Time / h")
     ax_power.set_ylabel("Power MW / Temp C")
     #ax_power.set_title("Total cost: {0:.1f}".format(cost_solved))
 
-    ax_speed.step(x, speeds, color='r', where=where)
-    ax_speed.set_ylabel("km / h")
-    ax_speed.legend(["Flow Speed"])
+    if 0:
+        ax_speed.step(x, speeds, color='r', where=where)
+        ax_speed.set_ylabel("km / h")
+        ax_speed.legend(["Flow Speed"])
 
     if "acc" in G:
         ax_acc.step(x, acc_in, where=where)
@@ -238,12 +239,12 @@ def present(axes, G):
 
 def main():
     np.random.seed(0)
-    demand = get_demand_forecast(num_days=1)
+    demand = get_demand_forecast(num_days=3)
     structure = get_structure("structure_debug")
     policy = get_policy("policy_debug")
 
     fig, axes = plt.subplots(nrows=policy["num_axes"])
-    G = plan(demand, policy, structure, burn_in=12, solver="couenne")
+    G = plan(demand, policy, structure, burn_in=12, solver="CBC")
     present(axes, G)
     plt.show()
 

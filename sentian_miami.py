@@ -93,8 +93,11 @@ class SolverPyomo:
         setattr(self.model, name, constraint)
         return constraint
 
-    def Solve(self, time_limit=None, verbose=True):
+    def Solve(self, time_limit=None, verbose=False):
+        t0 = time.time()
         res = self.solver.solve(self.model)
+        t1 = time.time()
+        print("Time: {0:.3f}".format(t1 -t0))
         if verbose:
             res.write()
             self.model.pprint()
